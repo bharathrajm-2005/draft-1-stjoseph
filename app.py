@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, render_template
 from config import Config
 from database.db import init_db
 from backend.routes import api_bp
@@ -20,7 +20,11 @@ def create_app():
     
     @app.route('/')
     def index():
-        return {"project": "AI-Driven Patient Experience Analytics", "version": "1.0.0"}
+        return render_template('patient.html')
+
+    @app.route('/admin')
+    def admin_dashboard():
+        return render_template('admin_dashboard.html')
 
     return app
 

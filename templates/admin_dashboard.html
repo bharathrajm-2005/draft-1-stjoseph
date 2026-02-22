@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hospital Experience Admin — Management Portal</title>
+    <link rel="stylesheet" href="/static/css/admin.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="admin-layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <span class="logo-icon">⚕️</span>
+                <span class="logo-text">Aurevia Admin</span>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <h4 class="nav-title">Management Queue</h4>
+                    <div class="filter-group">
+                        <label>Department</label>
+                        <select id="filterDept" class="filter-input">
+                            <option value="all">Loading departments...</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label>Sentiment</label>
+                        <select id="filterSentiment" class="filter-input">
+                            <option value="all">All Sentiments</option>
+                            <option value="Negative">Negative</option>
+                            <option value="Neutral">Neutral</option>
+                            <option value="Positive">Positive</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label>Status</label>
+                        <select id="filterStatus" class="filter-input">
+                            <option value="active">Active (Open & Progress)</option>
+                            <option value="all">All Statuses</option>
+                            <option value="Open">Open</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Resolved">Resolved</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="sidebar-footer">
+                    <button id="refreshBtn" class="btn btn-secondary btn-sm">Refresh Now</button>
+                    <div id="lastUpdate" class="update-info">Just now</div>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="content-header">
+                <h1 class="page-title">Analytics & Incident Response</h1>
+                <div class="metrics-grid" id="metricsGrid">
+                    <div class="metric-card">
+                        <span class="metric-label">Active Tickets</span>
+                        <h2 class="metric-value" id="metricActive">-</h2>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Avg Rating</span>
+                        <h2 class="metric-value" id="metricRating">-</h2>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Critical Cases</span>
+                        <h2 class="metric-value" id="metricCritical">-</h2>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Wait Time Alert</span>
+                        <h2 class="metric-value" id="metricWait">-</h2>
+                    </div>
+                </div>
+            </header>
+
+            <section class="ticket-section">
+                <div class="section-header">
+                    <h2>Priority Queue</h2>
+                    <div class="view-controls">
+                        <span class="legend-item"><span class="dot dot-negative"></span> Negative</span>
+                        <span class="legend-item"><span class="dot dot-neutral"></span> Neutral</span>
+                        <span class="legend-item"><span class="dot dot-positive"></span> Positive</span>
+                    </div>
+                </div>
+
+                <div class="ticket-grid" id="ticketGrid">
+                    <!-- Tickets will be injected here by JS -->
+                    <div class="loading-state">
+                        <div class="spinner"></div>
+                        <p>Loading patient database...</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Notification system -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="/static/js/admin.js"></script>
+</body>
+
+</html>
