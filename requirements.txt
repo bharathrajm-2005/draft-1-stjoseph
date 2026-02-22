@@ -1,0 +1,14 @@
+flask
+flask-sqlalchemy
+streamlit
+plotly
+nltk
+scikit-learn
+vaderSentiment
+pandas
+numpy
+joblib
+python-dotenv
+pytest
+requests
+flask-cors
