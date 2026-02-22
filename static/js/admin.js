@@ -115,17 +115,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // Apply filters
         return merged.filter(item => {
             const deptMatch = currentFilters.dept === 'all' || String(item.department).trim() === currentFilters.dept;
-            const sentimentMatch = currentFilters.sentiment === 'all' || String(item.sentiment).trim() === currentFilters.sentiment;
+            const sentimentMatch = currentFilters.sentiment === 'all' || String(item.sentiment).trim().toLowerCase() === currentFilters.sentiment.toLowerCase();
 
             let statusMatch = true;
+            // Apply filtering logic
             if (currentFilters.status === 'active') {
-                statusMatch = item.status === 'Open' || item.status === 'In Progress';
+                // Show Open, In Progress, or items with NO task (informational)
+                statusMatch = (item.status === 'Open' || item.status === 'In Progress' || item.status === 'N/A');
             } else if (currentFilters.status !== 'all') {
                 statusMatch = item.status === currentFilters.status;
             }
 
-            const isTicket = item.taskId !== null;
-            return deptMatch && sentimentMatch && statusMatch && isTicket;
+            return deptMatch && sentimentMatch && statusMatch;
         });
     };
 
@@ -149,12 +150,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const sortData = (data) => {
         const sentimentPriority = { 'Negative': 0, 'Neutral': 1, 'Positive': 2 };
-        const statusPriority = { 'Open': 0, 'In Progress': 1, 'Resolved': 2 };
+        const statusPriority = { 'Open': 0, 'In Progress': 1, 'Resolved': 2, 'N/A': 3 }; // N/A for no task
 
         return [...data].sort((a, b) => {
             // 1. Status Priority
-            const sA = statusPriority[a.status] ?? 3;
-            const sB = statusPriority[b.status] ?? 3;
+            const sA = statusPriority[a.status] ?? 4;
+            const sB = statusPriority[b.status] ?? 4;
             if (sA !== sB) return sA - sB;
 
             // 2. Sentiment Priority
@@ -195,12 +196,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const newHTML = data.map(ticket => {
             const sentimentClass = ticket.sentiment.toLowerCase();
             const statusClass = ticket.status.toLowerCase().replace(' ', '-');
+            const hasTask = ticket.taskId !== null;
+            const ticketLabel = hasTask ? `Ticket #${ticket.taskId}` : `Feedback #${ticket.id}`;
 
             return `
-                <div class="ticket-card ${sentimentClass.substring(0, 3)}" data-id="${ticket.taskId}">
+                <div class="ticket-card ${sentimentClass.substring(0, 3)}" data-id="${ticket.taskId || ''}">
                     <div class="ticket-info">
                         <div class="ticket-head">
-                            <h3>Ticket #${ticket.taskId} — Patient ${ticket.patient_id}</h3>
+                            <h3>${ticketLabel} — Patient ${ticket.patient_id}</h3>
                             <span class="badge badge-status-${statusClass}">${ticket.status}</span>
                         </div>
                         <div class="ticket-meta">
@@ -213,12 +216,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                     </div>
                     <div class="ticket-actions">
-                        <label style="font-size: 0.75rem; color: var(--text-muted)">Update Status</label>
-                        <select class="status-select" onchange="window.handleStatusUpdate(${ticket.taskId}, this.value)">
-                            <option value="Open" ${ticket.status === 'Open' ? 'selected' : ''}>Open</option>
-                            <option value="In Progress" ${ticket.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
-                            <option value="Resolved" ${ticket.status === 'Resolved' ? 'selected' : ''}>Resolved</option>
-                        </select>
+                        ${hasTask ? `
+                            <label style="font-size: 0.75rem; color: var(--text-muted)">Update Status</label>
+                            <select class="status-select" onchange="window.handleStatusUpdate(${ticket.taskId}, this.value)">
+                                <option value="Open" ${ticket.status === 'Open' ? 'selected' : ''}>Open</option>
+                                <option value="In Progress" ${ticket.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
+                                <option value="Resolved" ${ticket.status === 'Resolved' ? 'selected' : ''}>Resolved</option>
+                            </select>
+                        ` : `
+                            <span style="font-size: 0.75rem; color: var(--text-muted)">No active recovery task required</span>
+                        `}
                     </div>
                 </div>
             `;
