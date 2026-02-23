@@ -16,20 +16,21 @@ SENTIMENT_MODEL_PATH = MODEL_DIR / "sentiment_vader.pkl"
 CLASSIFIER_MODEL_PATH = MODEL_DIR / "trained_classifier.pkl"
 VECTORIZER_PATH = MODEL_DIR / "tfidf_vectorizer.pkl"
 
-# SLA Settings (in hours)
+# SLA Settings (in minutes)
 SLA_LEVELS = {
-    'Critical': 4,
-    'High': 24,
-    'Medium': 48,
-    'Low': 72
+    'Critical': 360,  # 6h
+    'High': 360,      # 6h
+    'Medium': 720,    # 12h
+    'Normal': 4320    # 72h
 }
 
 # Department assignments
 ISSUE_DEPARTMENTS = {
-    'Billing': 'Finance',
-    'Waiting Time': 'Front Desk',
-    'Staff Behavior': 'HR',
-    'Clinical Quality': 'Medical',
-    'Facility': 'Maintenance',
-    'Other': 'General Services'
+    'Billing': 'Billing',
+    'Waiting Time': 'Administration',
+    'Staff Behavior': 'Administration',
+    'Clinical Quality': 'General Medicine',
+    'Facility': 'General Medicine',
+    'Emergency': 'Emergency',
+    'Other': 'Administration'
 }

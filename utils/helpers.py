@@ -6,7 +6,7 @@ def format_response(status, data=None, message=None):
         "status": status,
         "data": data,
         "message": message,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat() + "Z"
     }
 
 def calculate_deadline(hours):

@@ -1,277 +1,432 @@
-document.addEventListener('DOMContentLoaded', () => {
-    // Configuration
-    const API_BASE_URL = '/api';
-    const REFRESH_INTERVAL = 10000; // 10 seconds
+/**
+ * AUREVIA HOSPITAL INCIDENT INTELLIGENCE
+ * FULLY AUTOMATED SMART ASSIGNMENT SYSTEM
+ */
 
-    // State
-    let feedbacks = [];
-    let tasks = [];
-    let lastRenderedHTML = '';
-    let currentFilters = {
-        dept: 'all',
+document.addEventListener('DOMContentLoaded', () => {
+    // Configuration & State
+    const API_BASE_URL = '/api';
+    const REFRESH_INTERVAL = 30000;
+    let activeTickets = [];
+    let currentTicketId = null;
+    let refreshTimer = null;
+    let slaTimerInterval = null;
+
+    const filters = {
+        department: 'all',
         sentiment: 'all',
         status: 'active'
     };
 
     // DOM Elements
-    const ticketGrid = document.getElementById('ticketGrid');
-    const refreshBtn = document.getElementById('refreshBtn');
-    const lastUpdateEl = document.getElementById('lastUpdate');
+    const elements = {
+        ticketGrid: document.getElementById('ticketGrid'),
+        metrics: {
+            active: document.getElementById('metricActive'),
+            rating: document.getElementById('metricRating'),
+            critical: document.getElementById('metricCritical'),
+            wait: document.getElementById('metricWait'),
+        },
+        sidebar: {
+            deptFilter: document.getElementById('filterDept'),
+            sentimentFilter: document.getElementById('filterSentiment'),
+            statusFilter: document.getElementById('filterStatus'),
+            viewAnalytics: document.getElementById('showAnalyticsBtn'),
+            viewHeatmap: document.getElementById('showHeatmapBtn'),
+            refreshBtn: document.getElementById('refreshBtn'),
+            lastUpdate: document.getElementById('lastUpdate')
+        },
+        views: {
+            ticketView: document.querySelector('.ticket-view'),
+            analyticsView: document.getElementById('analyticsSection'),
+            heatmapView: document.getElementById('heatmapSection')
+        },
+        detailPanel: {
+            panel: document.getElementById('detailPanel'),
+            overlay: document.getElementById('detailOverlay'),
+            close: document.getElementById('closePanel'),
+            id: document.getElementById('detailTicketId'),
+            dept: document.getElementById('detailDepartmentName'),
+            status: document.getElementById('detailStatusBadge'),
+            severity: document.getElementById('detailSeverityBadge'),
+            countdown: document.getElementById('detailSLACountdown'),
+            patientId: document.getElementById('detailPatientId'),
+            sentiment: document.getElementById('detailSentiment'),
+            received: document.getElementById('detailReceived'),
+            feedbackText: document.getElementById('detailFeedbackText'),
+            aiResponseDraft: document.getElementById('aiResponseDraft'),
+            regenerateBtn: document.getElementById('regenerateBtn'),
+            approveResponseBtn: document.getElementById('approveResponseBtn'),
+            aiAssigningStatus: document.getElementById('aiAssigningStatus'),
+            autoAssignedDoctorInfo: document.getElementById('autoAssignedDoctorInfo'),
+            resolveBtn: document.getElementById('resolveBtn'),
+            history: document.getElementById('statusHistory')
+        }
+    };
 
-    const metricActive = document.getElementById('metricActive');
-    const metricRating = document.getElementById('metricRating');
-    const metricCritical = document.getElementById('metricCritical');
-    const metricWait = document.getElementById('metricWait');
-
-    const filterDept = document.getElementById('filterDept');
-    const filterSentiment = document.getElementById('filterSentiment');
-    const filterStatus = document.getElementById('filterStatus');
-
-    // Initialization
-    const init = async () => {
+    // --- INITIALIZATION ---
+    function init() {
+        loadDashboardState();
         setupEventListeners();
-        await loadData();
-        startPolling();
-    };
+        setupPolling();
+        startSLAUpdates();
+        populateDepartmentFilter();
+    }
 
-    const setupEventListeners = () => {
-        refreshBtn.addEventListener('click', loadData);
-
-        filterDept.addEventListener('change', (e) => {
-            currentFilters.dept = e.target.value;
-            renderUI();
+    function setupEventListeners() {
+        elements.sidebar.deptFilter.addEventListener('change', (e) => {
+            filters.department = e.target.value;
+            loadTickets();
+        });
+        elements.sidebar.sentimentFilter.addEventListener('change', (e) => {
+            filters.sentiment = e.target.value;
+            loadTickets();
+        });
+        elements.sidebar.statusFilter.addEventListener('change', (e) => {
+            filters.status = e.target.value;
+            loadTickets();
         });
 
-        filterSentiment.addEventListener('change', (e) => {
-            currentFilters.sentiment = e.target.value;
-            renderUI();
-        });
+        elements.sidebar.viewAnalytics.addEventListener('click', () => switchView('analytics'));
+        elements.sidebar.viewHeatmap.addEventListener('click', () => switchView('heatmap'));
+        elements.sidebar.refreshBtn.addEventListener('click', loadDashboardState);
 
-        filterStatus.addEventListener('change', (e) => {
-            currentFilters.status = e.target.value;
-            renderUI();
-        });
-    };
+        const closeAnalytics = document.getElementById('closeAnalytics');
+        const closeHeatmap = document.getElementById('closeHeatmap');
+        if (closeAnalytics) closeAnalytics.addEventListener('click', () => switchView('tickets'));
+        if (closeHeatmap) closeHeatmap.addEventListener('click', () => switchView('tickets'));
 
-    const loadData = async () => {
-        refreshBtn.classList.add('loading');
+        elements.detailPanel.close.addEventListener('click', closeDetailPanel);
+        elements.detailPanel.overlay.addEventListener('click', closeDetailPanel);
+        elements.detailPanel.resolveBtn.addEventListener('click', handleResolution);
+        elements.detailPanel.regenerateBtn.addEventListener('click', handleRegenerateResponse);
+        elements.detailPanel.approveResponseBtn.addEventListener('click', handleApproveResponse);
+    }
+
+    // --- DATA LOADING ---
+    async function loadDashboardState() {
+        await Promise.all([loadMetrics(), loadTickets()]);
+        updateLastSyncTime();
+    }
+
+    async function loadMetrics() {
         try {
-            const [fRes, tRes] = await Promise.all([
-                fetch(`${API_BASE_URL}/get-feedback`),
-                fetch(`${API_BASE_URL}/tasks`)
-            ]);
+            const res = await fetch(`${API_BASE_URL}/stats/dashboard`);
+            const { data } = await res.json();
+            elements.metrics.active.textContent = data.activeTickets;
+            elements.metrics.rating.textContent = data.averageRating;
+            elements.metrics.critical.textContent = data.criticalCases;
+            elements.metrics.wait.textContent = data.waitTimeAlert;
+        } catch (e) { console.error('Metrics Load Error:', e); }
+    }
 
-            const fData = await fRes.json();
-            const tData = await tRes.json();
-
-            feedbacks = fData.data || [];
-            tasks = tData.data || [];
-
-            updateDepartmentDropdown(tasks);
-            renderUI();
-            updateLastRefreshTime();
-        } catch (error) {
-            console.error('Error loading dashboard data:', error);
-            showToast('Failed to sync with server');
-        } finally {
-            refreshBtn.classList.remove('loading');
+    async function loadTickets() {
+        try {
+            showLoading(true);
+            const params = new URLSearchParams(filters);
+            const res = await fetch(`${API_BASE_URL}/tickets?${params}`);
+            const { data } = await res.json();
+            activeTickets = data;
+            renderTicketGrid();
+            showLoading(false);
+        } catch (e) {
+            console.error('Tickets Load Error:', e);
+            showLoading(false);
         }
-    };
+    }
 
-    const startPolling = () => {
-        setInterval(loadData, REFRESH_INTERVAL);
-    };
-
-    const updateLastRefreshTime = () => {
-        const now = new Date();
-        lastUpdateEl.textContent = `Last sync: ${now.toLocaleTimeString()}`;
-    };
-
-    const renderUI = () => {
-        const mergedData = mergeAndFilterData();
-        const sortedData = sortData(mergedData);
-
-        renderMetrics(feedbacks, tasks);
-        renderTickets(sortedData);
-    };
-
-    const mergeAndFilterData = () => {
-        // Map tasks to feedbacks
-        const taskMap = {};
-        tasks.forEach(t => {
-            taskMap[t.feedback_id] = t;
+    async function populateDepartmentFilter() {
+        const departments = [
+            "Emergency", "Cardiology", "Neurology", "Orthopedics", "Billing",
+            "Pharmacy", "General Medicine", "Radiology", "ICU", "Administration"
+        ];
+        departments.forEach(dept => {
+            const opt = document.createElement('option');
+            opt.value = dept;
+            opt.textContent = dept;
+            elements.sidebar.deptFilter.appendChild(opt);
         });
+    }
 
-        let merged = feedbacks.map(f => {
-            const task = taskMap[f.id];
-            return {
-                ...f,
-                taskId: task ? task.id : null,
-                department: task ? task.department : 'N/A',
-                status: task ? task.status : 'N/A'
-            };
-        });
-
-        // Apply filters
-        return merged.filter(item => {
-            const deptMatch = currentFilters.dept === 'all' || String(item.department).trim() === currentFilters.dept;
-            const sentimentMatch = currentFilters.sentiment === 'all' || String(item.sentiment).trim().toLowerCase() === currentFilters.sentiment.toLowerCase();
-
-            let statusMatch = true;
-            // Apply filtering logic
-            if (currentFilters.status === 'active') {
-                // Show Open, In Progress, or items with NO task (informational)
-                statusMatch = (item.status === 'Open' || item.status === 'In Progress' || item.status === 'N/A');
-            } else if (currentFilters.status !== 'all') {
-                statusMatch = item.status === currentFilters.status;
-            }
-
-            return deptMatch && sentimentMatch && statusMatch;
-        });
-    };
-
-    const updateDepartmentDropdown = (taskList) => {
-        const depts = [...new Set(taskList.map(t => t.department))].sort();
-        const currentValue = filterDept.value;
-
-        // Keep "All Departments" and add others
-        let html = '<option value="all">All Departments</option>';
-        depts.forEach(d => {
-            if (d && d !== 'N/A') {
-                html += `<option value="${d}" ${d === currentValue ? 'selected' : ''}>${d}</option>`;
-            }
-        });
-
-        // Only update if list has changed to avoid flickering while clicking
-        if (filterDept.innerHTML !== html) {
-            filterDept.innerHTML = html;
-        }
-    };
-
-    const sortData = (data) => {
-        const sentimentPriority = { 'Negative': 0, 'Neutral': 1, 'Positive': 2 };
-        const statusPriority = { 'Open': 0, 'In Progress': 1, 'Resolved': 2, 'N/A': 3 }; // N/A for no task
-
-        return [...data].sort((a, b) => {
-            // 1. Status Priority
-            const sA = statusPriority[a.status] ?? 4;
-            const sB = statusPriority[b.status] ?? 4;
-            if (sA !== sB) return sA - sB;
-
-            // 2. Sentiment Priority
-            const sentA = sentimentPriority[a.sentiment] ?? 3;
-            const sentB = sentimentPriority[b.sentiment] ?? 3;
-            if (sentA !== sentB) return sentA - sentB;
-
-            // 3. Date (Newest first)
-            return new Date(b.created_at) - new Date(a.created_at);
-        });
-    };
-
-    const renderMetrics = (fList, tList) => {
-        const activeCount = tList.filter(t => t.status !== 'Resolved').length;
-        metricActive.textContent = activeCount;
-
-        const totalRating = fList.reduce((acc, f) => acc + (f.rating || 0), 0);
-        const avg = fList.length > 0 ? (totalRating / fList.length).toFixed(1) : '0.0';
-        metricRating.textContent = `${avg}/5.0`;
-
-        const criticalCount = fList.filter(f => f.severity === 'High').length;
-        metricCritical.textContent = criticalCount;
-
-        const waitCount = tList.filter(t => t.department === 'Wait Time').length;
-        metricWait.textContent = waitCount;
-    };
-
-    const renderTickets = (data) => {
-        if (data.length === 0) {
-            ticketGrid.innerHTML = `
-                <div class="loading-state">
-                    <p>No active tickets found matching your filters.</p>
-                </div>
-            `;
+    // --- RENDERING ---
+    function renderTicketGrid() {
+        if (activeTickets.length === 0) {
+            elements.ticketGrid.innerHTML = '<div class="loading-state">No tickets found matching filters.</div>';
             return;
         }
 
-        const newHTML = data.map(ticket => {
-            const sentimentClass = ticket.sentiment.toLowerCase();
-            const statusClass = ticket.status.toLowerCase().replace(' ', '-');
-            const hasTask = ticket.taskId !== null;
-            const ticketLabel = hasTask ? `Ticket #${ticket.taskId}` : `Feedback #${ticket.id}`;
+        elements.ticketGrid.innerHTML = activeTickets.map(ticket => {
+            const isBreached = new Date(ticket.sla_deadline) < new Date();
+            const isResolved = ticket.status === 'Resolved';
+            let stateClass = isResolved ? 'state-resolved' : (isBreached ? 'state-breached' : 'state-pending');
+            const slaDisplay = isResolved ? 'COMPLETED' : getSLAStatus(ticket.sla_deadline);
 
             return `
-                <div class="ticket-card ${sentimentClass.substring(0, 3)}" data-id="${ticket.taskId || ''}">
-                    <div class="ticket-info">
-                        <div class="ticket-head">
-                            <h3>${ticketLabel} — Patient ${ticket.patient_id}</h3>
-                            <span class="badge badge-status-${statusClass}">${ticket.status}</span>
-                        </div>
-                        <div class="ticket-meta">
-                            <strong>Dept:</strong> ${ticket.department} &nbsp;|&nbsp; 
-                            <strong>Sentiment:</strong> <span class="sentiment-${sentimentClass}">${ticket.sentiment}</span>
-                        </div>
-                        <p class="ticket-text">"${ticket.feedback_text}"</p>
-                        <div class="ticket-meta">
-                            <small>Received: ${new Date(ticket.created_at).toLocaleString()}</small>
+                <div class="ticket-card ${stateClass}" onclick="openTicketDetails(${ticket.id})">
+                    <div class="ticket-card-header">
+                        <span class="dept-tag">${ticket.department}</span>
+                        <span class="badge badge-${ticket.severity.toLowerCase().substring(0, 3)}">${ticket.severity}</span>
+                    </div>
+                    <div class="ticket-card-body">
+                        <h3>Patient: ${ticket.patient_id}</h3>
+                        <p class="status-summary">Status: <strong>${ticket.status}</strong></p>
+                    </div>
+                    <div class="ticket-card-footer">
+                        <span>${formatTimeAgo(ticket.created_at)}</span>
+                        <div class="sla-timer-pill ${isBreached && !isResolved ? 'breached' : ''} ${isResolved ? 'resolved' : ''}" 
+                             data-deadline="${ticket.sla_deadline}" data-id="${ticket.id}">
+                            ${isResolved ? '✅' : '⏳'} ${slaDisplay}
                         </div>
                     </div>
-                    <div class="ticket-actions">
-                        ${hasTask ? `
-                            <label style="font-size: 0.75rem; color: var(--text-muted)">Update Status</label>
-                            <select class="status-select" onchange="window.handleStatusUpdate(${ticket.taskId}, this.value)">
-                                <option value="Open" ${ticket.status === 'Open' ? 'selected' : ''}>Open</option>
-                                <option value="In Progress" ${ticket.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
-                                <option value="Resolved" ${ticket.status === 'Resolved' ? 'selected' : ''}>Resolved</option>
-                            </select>
-                        ` : `
-                            <span style="font-size: 0.75rem; color: var(--text-muted)">No active recovery task required</span>
-                        `}
-                    </div>
+                    ${ticket.escalation_level > 0 ? `<div class="ai-reason-pill" style="margin-top:8px">🚨 Escalation L${ticket.escalation_level}</div>` : ''}
                 </div>
             `;
         }).join('');
+    }
 
-        // Flicker-free update: only replace if content changed
-        if (lastRenderedHTML !== newHTML) {
-            ticketGrid.innerHTML = newHTML;
-            lastRenderedHTML = newHTML;
-        }
-    };
-
-    // Global exposed function for status updates
-    window.handleStatusUpdate = async (taskId, newStatus) => {
+    // --- DETAIL PANEL ---
+    window.openTicketDetails = async function (id) {
+        currentTicketId = id;
         try {
-            const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: newStatus })
-            });
+            const res = await fetch(`${API_BASE_URL}/tickets/${id}`);
+            const { data } = await res.json();
 
-            if (response.ok) {
-                showToast(`Ticket #${taskId} updated to ${newStatus}`);
-                await loadData();
+            // Reset Panel State
+            elements.detailPanel.aiAssigningStatus.classList.remove('hidden');
+            elements.detailPanel.autoAssignedDoctorInfo.classList.add('hidden');
+
+            elements.detailPanel.id.textContent = `#TICKET-HID-${data.id}`;
+            elements.detailPanel.dept.textContent = data.department;
+            elements.detailPanel.status.textContent = data.status;
+            elements.detailPanel.status.className = `status-badge status-${data.status.toLowerCase().replace(' ', '-')}`;
+            elements.detailPanel.severity.textContent = data.severity;
+            elements.detailPanel.severity.className = `severity-badge badge-${data.severity.toLowerCase().substring(0, 3)}`;
+
+            elements.detailPanel.patientId.textContent = data.patient_id;
+            elements.detailPanel.sentiment.textContent = data.sentiment;
+            elements.detailPanel.received.textContent = new Date(data.created_at).toLocaleString();
+            elements.detailPanel.feedbackText.textContent = `"${data.feedback_text}"`;
+            elements.detailPanel.aiResponseDraft.value = data.ai_suggested_response || '';
+
+            renderTimeline(data.status_history);
+            elements.detailPanel.panel.classList.add('active');
+            elements.detailPanel.overlay.classList.add('active');
+            updatePanelSLA(data.sla_deadline, data.status);
+
+            // MANDATORY 1 SECOND AI DELAY
+            setTimeout(async () => {
+                const staffRes = await fetch(`${API_BASE_URL}/departments/${data.department}/staff`);
+                const staffData = await staffRes.json();
+                const assignedStaff = staffData.data.find(s => s.id === data.assigned_staff_id);
+
+                if (assignedStaff) {
+                    displayAssignedDoctor(assignedStaff);
+                } else {
+                    elements.detailPanel.aiAssigningStatus.innerHTML = "⚠️ No Specialist Available in Dept.";
+                }
+            }, 1000);
+
+            if (data.status === 'Resolved') {
+                document.getElementById('aiResponseSection').style.display = 'none';
+                document.getElementById('assignmentSection').style.display = 'none';
+                document.getElementById('resolutionSection').style.display = 'none';
             } else {
-                showToast('Failed to update ticket status', true);
+                document.getElementById('aiResponseSection').style.display = 'block';
+                document.getElementById('assignmentSection').style.display = 'block';
+                document.getElementById('resolutionSection').style.display = 'block';
             }
+
         } catch (error) {
-            console.error('Error updating status:', error);
-            showToast('Network error while updating status', true);
+            console.error('Error fetching ticket details:', error);
+            showToast('Could not load ticket details', 'error');
         }
     };
 
-    const showToast = (message, isError = false) => {
-        const container = document.getElementById('toastContainer');
-        const toast = document.createElement('div');
-        toast.className = 'toast';
-        if (isError) toast.style.backgroundColor = 'var(--sentiment-neg)';
-        toast.textContent = message;
+    function displayAssignedDoctor(staff) {
+        elements.detailPanel.aiAssigningStatus.classList.add('hidden');
+        elements.detailPanel.autoAssignedDoctorInfo.classList.remove('hidden');
 
-        container.appendChild(toast);
+        const loadColor = staff.load_pct <= 40 ? 'fill-low' : (staff.load_pct <= 70 ? 'fill-med' : 'fill-high');
+
+        elements.detailPanel.autoAssignedDoctorInfo.innerHTML = `
+            <div class="auto-staff-header">
+                <div>
+                    <span class="auto-staff-name">${staff.name} 🤖 AI Choice</span>
+                    <span class="auto-staff-dept">${staff.designation}</span>
+                </div>
+            </div>
+            <div class="load-meter-bg">
+                <div class="load-meter-fill ${loadColor}" style="width: ${staff.load_pct}%"></div>
+            </div>
+            <div class="auto-staff-metrics">
+                <div class="metric-mini">
+                    <span class="metric-mini-label">Current Load</span>
+                    <span class="metric-mini-value">${staff.active_tickets}/10 Tasks</span>
+                </div>
+                <div class="metric-mini">
+                    <span class="metric-mini-label">Success Rate</span>
+                    <span class="metric-mini-value">${staff.performance_rating}/5.0</span>
+                </div>
+                <div class="metric-mini">
+                    <span class="metric-mini-label">Avg Res Time</span>
+                    <span class="metric-mini-value">${staff.avg_res_time}m</span>
+                </div>
+            </div>
+        `;
+    }
+
+    async function handleResolution() {
+        try {
+            const res = await fetch(`${API_BASE_URL}/tickets/${currentTicketId}/resolve`, { method: 'POST' });
+            if (res.ok) {
+                showToast('Ticket Resolved & Closed');
+                closeDetailPanel();
+                loadDashboardState();
+            }
+        } catch (e) { showToast('Resolution failed', 'error'); }
+    }
+
+    async function handleRegenerateResponse() {
+        elements.detailPanel.aiResponseDraft.value = "Regenerating draft...";
+        try {
+            const res = await fetch(`${API_BASE_URL}/tickets/${currentTicketId}/regenerate-response`, { method: 'POST' });
+            const { data } = await res.json();
+            elements.detailPanel.aiResponseDraft.value = data.suggestion;
+        } catch (e) { showToast('Regeneration failed', 'error'); }
+    }
+
+    async function handleApproveResponse() {
+        const content = elements.detailPanel.aiResponseDraft.value;
+        try {
+            await fetch(`${API_BASE_URL}/tickets/${currentTicketId}/approve-response`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ response_content: content })
+            });
+            showToast('AI Response Sent Successfully');
+        } catch (e) { showToast('Approval failed', 'error'); }
+    }
+
+    function renderTimeline(history) {
+        elements.detailPanel.history.innerHTML = history.reverse().map(item => `
+            <div class="timeline-item">
+                <span class="tl-time">${new Date(item.timestamp).toLocaleString()}</span>
+                <span class="tl-text">${item.action}</span>
+            </div>
+        `).join('');
+    }
+
+    function closeDetailPanel() {
+        elements.detailPanel.panel.classList.remove('active');
+        elements.detailPanel.overlay.classList.remove('active');
+        currentTicketId = null;
+    }
+
+    function switchView(viewName) {
+        Object.values(elements.views).forEach(v => v.classList.add('hidden'));
+        if (viewName === 'analytics') {
+            elements.views.analyticsView.classList.remove('hidden');
+            renderAnalytics();
+        } else if (viewName === 'heatmap') {
+            elements.views.heatmapView.classList.remove('hidden');
+            renderHeatmap();
+        } else {
+            elements.views.ticketView.classList.remove('hidden');
+        }
+    }
+
+    async function renderAnalytics() {
+        try {
+            const res = await fetch(`${API_BASE_URL}/analytics/performance`);
+            const { data } = await res.json();
+            Plotly.newPlot('deptComparisonChart', [{
+                x: data.map(d => d.department),
+                y: data.map(d => d.totalTickets),
+                type: 'bar',
+                marker: { color: '#2563eb' }
+            }], { height: 350 });
+        } catch (e) { console.error('Analytics Error:', e); }
+    }
+
+    async function renderHeatmap() {
+        const res = await fetch(`${API_BASE_URL}/analytics/heatmap`);
+        const { data } = await res.json();
+        const depts = [...new Set(data.map(d => d.department))];
+        const hours = Array.from({ length: 24 }, (_, i) => i);
+        const z = depts.map(d => hours.map(h => {
+            const found = data.find(item => item.department === d && item.hour === h);
+            return found ? found.count : 0;
+        }));
+        Plotly.newPlot('complaintHeatmap', [{
+            x: hours.map(h => h + ":00"),
+            y: depts, z: z, type: 'heatmap', colorscale: [['0.0', '#f8fafc'], ['1.0', '#000000']]
+        }], { height: 450 });
+    }
+
+    function startSLAUpdates() {
+        if (slaTimerInterval) clearInterval(slaTimerInterval);
+        slaTimerInterval = setInterval(() => {
+            document.querySelectorAll('.sla-timer-pill').forEach(pill => {
+                if (pill.classList.contains('resolved')) return;
+                const deadline = pill.getAttribute('data-deadline');
+                pill.innerHTML = `⏳ ${getSLAStatus(deadline)}`;
+            });
+        }, 1000);
+    }
+
+    function updatePanelSLA(deadline, status) {
+        const isResolved = status === 'Resolved';
+        const isBreached = new Date(deadline) < new Date();
+        if (isResolved) {
+            elements.detailPanel.countdown.textContent = '✅ COMPLETED';
+            elements.detailPanel.countdown.style.color = 'var(--success)';
+        } else if (isBreached) {
+            elements.detailPanel.countdown.textContent = '⚠️ BREACHED';
+            elements.detailPanel.countdown.style.color = '#000000';
+        } else {
+            elements.detailPanel.countdown.textContent = getSLAStatus(deadline);
+            elements.detailPanel.countdown.style.color = 'var(--danger)';
+        }
+    }
+
+    function getSLAStatus(deadlineStr) {
+        const diff = new Date(deadlineStr) - new Date();
+        if (diff <= 0) return "BREACHED";
+        const h = Math.floor(diff / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        const s = Math.floor((diff % 60000) / 1000);
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+    function formatTimeAgo(dateStr) {
+        const diff = Math.floor((new Date() - new Date(dateStr)) / 60000);
+        return diff < 1 ? 'Just now' : (diff < 60 ? `${diff}m ago` : `${Math.floor(diff / 60)}h ago`);
+    }
+
+    function setupPolling() {
+        if (refreshTimer) clearInterval(refreshTimer);
+        refreshTimer = setInterval(loadDashboardState, REFRESH_INTERVAL);
+    }
+
+    function updateLastSyncTime() {
+        elements.sidebar.lastUpdate.textContent = new Date().toLocaleTimeString();
+    }
+
+    function showLoading(show) {
+        elements.ticketGrid.style.opacity = show ? '0.6' : '1';
+    }
+
+    function showToast(message, type = 'success') {
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        document.getElementById('toastContainer').appendChild(toast);
+        setTimeout(() => toast.classList.add('show'), 100);
         setTimeout(() => {
-            toast.style.opacity = '0';
+            toast.classList.remove('show');
             setTimeout(() => toast.remove(), 300);
         }, 3000);
-    };
+    }
 
     init();
 });

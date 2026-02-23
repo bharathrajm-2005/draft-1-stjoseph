@@ -18,4 +18,4 @@ class SeverityEngine:
         if sentiment_score < -0.3:
             return "Medium"
         
-        return "Low"
+        return "Normal"

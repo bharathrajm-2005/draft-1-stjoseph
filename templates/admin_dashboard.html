@@ -4,18 +4,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hospital Experience Admin — Management Portal</title>
+    <title>Hospital Incident Intelligence — Management Portal</title>
     <link rel="stylesheet" href="/static/css/admin.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <!-- Plotly for Charts -->
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
 </head>
 
-<body>
+<body class="admin-body">
     <div class="admin-layout">
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <span class="logo-icon">⚕️</span>
-                <span class="logo-text">Aurevia Admin</span>
+                <div class="logo-wrapper">
+                    <span class="logo-icon">⚕️</span>
+                    <div class="logo-text">
+                        <h3>AUREVIA</h3>
+                        <span>INCIDENT INTELLIGENCE</span>
+                    </div>
+                </div>
             </div>
 
             <nav class="sidebar-nav">
@@ -24,7 +33,7 @@
                     <div class="filter-group">
                         <label>Department</label>
                         <select id="filterDept" class="filter-input">
-                            <option value="all">Loading departments...</option>
+                            <option value="all">All Departments</option>
                         </select>
                     </div>
 
@@ -41,18 +50,31 @@
                     <div class="filter-group">
                         <label>Status</label>
                         <select id="filterStatus" class="filter-input">
-                            <option value="active">Active (Open & Progress)</option>
-                            <option value="all">All Statuses</option>
-                            <option value="Open">Open</option>
+                            <option value="active" selected>Active Tickets</option>
+                            <option value="Open">Open Tickets</option>
                             <option value="In Progress">In Progress</option>
                             <option value="Resolved">Resolved</option>
+                            <option value="all">All Statuses</option>
                         </select>
                     </div>
                 </div>
 
+                <div class="nav-section">
+                    <h4 class="nav-title">System Actions</h4>
+                    <button id="refreshBtn" class="nav-btn">
+                        <span>🔄</span> Refresh Dashboard
+                    </button>
+                    <button id="showAnalyticsBtn" class="nav-btn">
+                        <span>📊</span> Performance Reports
+                    </button>
+                    <button id="showHeatmapBtn" class="nav-btn">
+                        <span>🔥</span> Complaint Heatmap
+                    </button>
+                </div>
+
                 <div class="sidebar-footer">
-                    <button id="refreshBtn" class="btn btn-secondary btn-sm">Refresh Now</button>
-                    <div id="lastUpdate" class="update-info">Just now</div>
+                    <div class="update-info">Last update: <span id="lastUpdate">Just now</span></div>
+                    <div class="server-status"><span class="status-dot online"></span> System Live</div>
                 </div>
             </nav>
         </aside>
@@ -60,46 +82,168 @@
         <!-- Main Content -->
         <main class="main-content">
             <header class="content-header">
-                <h1 class="page-title">Analytics & Incident Response</h1>
+                <div class="header-titles">
+                    <h1 class="page-title">Executive Dashboard</h1>
+                    <p class="page-subtitle">Real-time Service Recovery & SLA Oversight</p>
+                </div>
                 <div class="metrics-grid" id="metricsGrid">
-                    <div class="metric-card">
-                        <span class="metric-label">Active Tickets</span>
-                        <h2 class="metric-value" id="metricActive">-</h2>
+                    <div class="metric-card active-tickets">
+                        <div class="metric-icon">🎫</div>
+                        <div class="metric-info">
+                            <span class="metric-label">Active Tickets</span>
+                            <h2 class="metric-value" id="metricActive">-</h2>
+                        </div>
                     </div>
-                    <div class="metric-card">
-                        <span class="metric-label">Avg Rating</span>
-                        <h2 class="metric-value" id="metricRating">-</h2>
+                    <div class="metric-card avg-rating">
+                        <div class="metric-icon">⭐</div>
+                        <div class="metric-info">
+                            <span class="metric-label">Avg Rating</span>
+                            <h2 class="metric-value" id="metricRating">-</h2>
+                        </div>
                     </div>
-                    <div class="metric-card">
-                        <span class="metric-label">Critical Cases</span>
-                        <h2 class="metric-value" id="metricCritical">-</h2>
+                    <div class="metric-card critical-cases">
+                        <div class="metric-icon">🚨</div>
+                        <div class="metric-info">
+                            <span class="metric-label">Critical cases</span>
+                            <h2 class="metric-value" id="metricCritical">-</h2>
+                        </div>
                     </div>
-                    <div class="metric-card">
-                        <span class="metric-label">Wait Time Alert</span>
-                        <h2 class="metric-value" id="metricWait">-</h2>
+                    <div class="metric-card wait-alert">
+                        <div class="metric-icon">⏳</div>
+                        <div class="metric-info">
+                            <span class="metric-label">In Progress Tasks</span>
+                            <h2 class="metric-value" id="metricWait">-</h2>
+                        </div>
                     </div>
                 </div>
             </header>
 
-            <section class="ticket-section">
-                <div class="section-header">
-                    <h2>Priority Queue</h2>
-                    <div class="view-controls">
-                        <span class="legend-item"><span class="dot dot-negative"></span> Negative</span>
-                        <span class="legend-item"><span class="dot dot-neutral"></span> Neutral</span>
-                        <span class="legend-item"><span class="dot dot-positive"></span> Positive</span>
+            <div class="dashboard-content">
+                <!-- Priority Queue Section -->
+                <section class="content-section ticket-view">
+                    <div class="section-header">
+                        <h2>Priority Queue</h2>
+                        <div class="view-legend">
+                            <span class="legend-item"><span class="badge badge-high">High</span> Severity</span>
+                            <span class="legend-item"><span class="badge badge-med">Med</span> Severity</span>
+                        </div>
+                    </div>
+
+                    <div class="ticket-grid" id="ticketGrid">
+                        <!-- Tickets injected here -->
+                        <div class="loading-state">
+                            <div class="spinner"></div>
+                            <p>Connecting to secure database...</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Analytics Section (Hidden by default) -->
+                <section class="content-section analytics-view hidden" id="analyticsSection">
+                    <div class="section-header">
+                        <h2>Performance Intelligence</h2>
+                        <button class="btn-close-view" id="closeAnalytics">Back to Queue</button>
+                    </div>
+                    <div class="analytics-grid">
+                        <div class="analytics-chart-card">
+                            <h3>Department Comparison</h3>
+                            <div id="deptComparisonChart"></div>
+                        </div>
+                        <div class="analytics-chart-card">
+                            <h3>Sentiment Breakdown</h3>
+                            <div id="sentimentDistributionChart"></div>
+                        </div>
+                        <div class="analytics-chart-card full-width">
+                            <h3>SLA Breach Trend</h3>
+                            <div id="slaTrendChart"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Heatmap Section (Hidden by default) -->
+                <section class="content-section heatmap-view hidden" id="heatmapSection">
+                    <div class="section-header">
+                        <h2>Incident Density Heatmap</h2>
+                        <button class="btn-close-view" id="closeHeatmap">Back to Queue</button>
+                    </div>
+                    <div class="heatmap-container">
+                        <div id="complaintHeatmap"></div>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- Detail Side Panel (Slide Drawer) -->
+        <div class="detail-overlay" id="detailOverlay"></div>
+        <aside class="detail-panel" id="detailPanel">
+            <div class="panel-header">
+                <div class="panel-title-group">
+                    <span id="detailTicketId" class="panel-ticket-id">#TICKET-XXXX</span>
+                    <h2 id="detailDepartmentName">Department Name</h2>
+                </div>
+                <button class="panel-close" id="closePanel">&times;</button>
+            </div>
+
+            <div class="panel-body">
+                <div class="panel-status-strip">
+                    <span id="detailStatusBadge" class="status-badge">Open</span>
+                    <span id="detailSeverityBadge" class="severity-badge">High</span>
+                    <div class="panel-sla-timer" id="detailSLATimer">
+                        <span class="timer-label">SLA Remaining:</span>
+                        <span class="timer-value" id="detailSLACountdown">--:--:--</span>
                     </div>
                 </div>
 
-                <div class="ticket-grid" id="ticketGrid">
-                    <!-- Tickets will be injected here by JS -->
-                    <div class="loading-state">
-                        <div class="spinner"></div>
-                        <p>Loading patient database...</p>
+                <div class="panel-section">
+                    <h4>Patient Information</h4>
+                    <p><strong>Patient ID:</strong> <span id="detailPatientId">-</span></p>
+                    <p><strong>Sentiment:</strong> <span id="detailSentiment" class="sentiment-text">-</span></p>
+                    <p><strong>Received:</strong> <span id="detailReceived">-</span></p>
+                </div>
+
+                <div class="panel-section">
+                    <h4>Feedback Context</h4>
+                    <div class="feedback-text-box" id="detailFeedbackText">
+                        Loading content...
                     </div>
                 </div>
-            </section>
-        </main>
+
+                <div class="panel-section" id="aiResponseSection">
+                    <div class="section-badge ai-badge">🤖 AI Response Engine</div>
+                    <h4>Contextual Response Suggestion</h4>
+                    <div class="ai-response-container">
+                        <textarea id="aiResponseDraft" class="form-textarea ai-draft-box"
+                            placeholder="Generating suggestion..."></textarea>
+                        <div class="ai-actions">
+                            <button id="regenerateBtn" class="btn btn-outline-sm">Regenerate</button>
+                            <button id="approveResponseBtn" class="btn btn-primary-sm">Approve & Send</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-section" id="assignmentSection">
+                    <div class="section-badge ai-badge">⚙️ Automated AI Assignment</div>
+                    <div id="aiAssigningStatus" class="ai-assigning-animation">
+                        🤖 Analyzing Staff Load & Performance...
+                    </div>
+                    <div id="autoAssignedDoctorInfo" class="auto-staff-card hidden">
+                        <!-- Infomation Injected by AI -->
+                    </div>
+                </div>
+
+                <div class="panel-section" id="resolutionSection">
+                    <button id="resolveBtn" class="btn btn-success full-width"
+                        style="font-weight: 800; letter-spacing: 1px;">✓ PROCESS FINISHED</button>
+                </div>
+
+                <div class="panel-section">
+                    <h4>Incident Lifecycle</h4>
+                    <div class="timeline" id="statusHistory">
+                        <!-- Timeline items injected here -->
+                    </div>
+                </div>
+            </div>
+        </aside>
     </div>
 
     <!-- Notification system -->
