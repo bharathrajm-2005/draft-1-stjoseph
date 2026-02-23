@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff Portal | Aurevia Hospital Intelligence</title>
+    <!-- Use admin CSS base rules -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/staff.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+
+<body class="dashboard-root admin-body">
+    <div class="app-container admin-layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-group">
+                    <span class="logo-icon">🏥</span>
+                    <span class="logo-text">Aurevia <small>Staff</small></span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <h4 class="nav-title">My Workspace</h4>
+                    <button id="viewTasksBtn" class="nav-btn active">
+                        <span>📋</span> My Active Tasks
+                    </button>
+                    <button id="viewPerfBtn" class="nav-btn">
+                        <span>📊</span> My Performance
+                    </button>
+                </div>
+
+                <div class="sidebar-footer">
+                    <a href="/logout" class="logout-link">
+                        <span>👋</span> Sign Out
+                    </a>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="content-header">
+                <div class="header-titles">
+                    <h1 class="page-title">Doctor Workspace</h1>
+                    <p class="page-subtitle" id="staffGreeting">Welcome back, Dr. ...</p>
+                </div>
+
+                <div class="staff-profile-metrics" id="currentStaffMetrics">
+                    <div class="profile-metric-pill">
+                        <span class="pill-label">Load</span>
+                        <span class="pill-value" id="profileLoad">--%</span>
+                    </div>
+                    <div class="profile-metric-pill">
+                        <span class="pill-label">Rating</span>
+                        <span class="pill-value" id="profileRating">--/5.0</span>
+                    </div>
+                </div>
+            </header>
+
+            <div class="dashboard-content">
+                <section class="content-section">
+                    <div class="section-header">
+                        <h2>Assigned Recovery Cases</h2>
+                        <span class="badge badge-active" id="taskCount">0 Active</span>
+                    </div>
+
+                    <div class="staff-task-grid" id="staffTaskGrid">
+                        <!-- Tasks Injected here -->
+                        <div class="loading-state">
+                            <p>Loading your assigned cases...</p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+    </div>
+
+    <!-- Completion Modal / Drawer (Moved outside for better stacking context) -->
+    <div class="detail-overlay" id="taskOverlay"></div>
+    <aside class="detail-panel" id="taskPanel">
+        <div class="panel-header">
+            <div class="panel-title-group">
+                <span id="taskTicketId" class="panel-ticket-id">#CASE-XXXX</span>
+                <h2 id="taskPatientId">Patient ID</h2>
+            </div>
+            <button class="panel-close" id="closeTaskPanel">&times;</button>
+        </div>
+
+        <div class="panel-body">
+            <div class="panel-status-strip">
+                <span id="taskSeverity" class="severity-badge">High</span>
+                <div class="panel-sla-timer">
+                    <span class="timer-label">SLA Remaining:</span>
+                    <span class="timer-value" id="taskSLA">--:--:--</span>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h4>Case Context</h4>
+                <div class="feedback-text-box" id="taskFeedbackBody">
+                    Feedback content...
+                </div>
+            </div>
+
+            <div id="aiSuggestionBox" class="panel-section">
+                <div class="section-badge ai-badge">🤖 AI Response Suggestion</div>
+                <div class="ai-response-container">
+                    <p id="taskAISuggestion" class="ai-text-preview"></p>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h4>Resolution Notes</h4>
+                <textarea id="resolutionNotes" class="form-textarea"
+                    placeholder="Describe clinical actions taken or communication provided..."></textarea>
+            </div>
+
+            <button id="completeTaskBtn" class="btn btn-success full-width">MARK AS RESOLVED</button>
+        </div>
+    </aside>
+
+    <div id="toastContainer"></div>
+
+    <script src="{{ url_for('static', filename='js/staff.js') }}"></script>
+</body>
+
+</html>

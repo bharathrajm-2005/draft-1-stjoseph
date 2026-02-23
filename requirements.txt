@@ -12,3 +12,4 @@ python-dotenv
 pytest
 requests
 flask-cors
+flask-login

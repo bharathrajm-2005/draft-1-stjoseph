@@ -26,7 +26,7 @@ class SLATracker:
         ten_mins_ago = now - timedelta(minutes=10)
         critical_unassigned = Ticket.query.join(Feedback).filter(
             Ticket.severity == 'Critical',
-            Ticket.assigned_staff_id == None,
+            Ticket.assigned_user_id == None,
             Ticket.status == 'Open',
             Feedback.created_at < ten_mins_ago,
             Ticket.escalation_level < 1

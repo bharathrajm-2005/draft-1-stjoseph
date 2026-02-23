@@ -1,10 +1,11 @@
 from flask import request, jsonify
 from datetime import datetime, timedelta
 from sqlalchemy import func, case
+from flask_login import current_user
 from services.recovery_service import RecoveryService
 from services.sla_tracker import SLATracker
 from services.ai_response_service import AIResponseService
-from database.models import Feedback, Ticket, Department, Staff, db, EscalationLog, AIResponseLog
+from database.models import Feedback, Ticket, Department, User, db, EscalationLog, AIResponseLog
 from utils.helpers import format_response
 from utils.logger import app_logger
 import json
@@ -42,14 +43,13 @@ def get_dashboard_stats():
         critical_cases = Ticket.query.filter(Ticket.severity == 'Critical').count()
         in_progress_count = Ticket.query.filter(Ticket.status == 'In Progress').count()
         
-        # Dept-wise counts
         dept_counts = db.session.query(Department.name, func.count(Ticket.id)).join(Ticket).filter(Ticket.status != 'Resolved').group_by(Department.name).all()
         
         return jsonify(format_response("success", data={
             "activeTickets": active_tickets,
             "averageRating": round(float(avg_rating), 1),
             "criticalCases": critical_cases,
-            "waitTimeAlert": in_progress_count, # Mapped to "In Progress" in UI
+            "waitTimeAlert": in_progress_count,
             "deptCounts": {d: c for d, c in dept_counts}
         }))
     except Exception as e:
@@ -105,9 +105,9 @@ def get_ticket_details(id):
         "feedback_text": ticket.feedback.feedback_text,
         "created_at": ticket.feedback.created_at.isoformat() + "Z",
         "status": ticket.status,
-        "assigned_staff": ticket.assigned_staff.name if ticket.assigned_staff else "Unassigned",
-        "assigned_staff_id": ticket.assigned_staff_id,
-        "internal_notes": ticket.internal_notes,
+        "assigned_staff": ticket.assigned_to_user.name if ticket.assigned_to_user else "Unassigned",
+        "assigned_staff_id": ticket.assigned_user_id,
+        "internal_notes": ticket.ai_suggested_response, # AI response is internal note now
         "ai_suggested_response": ticket.ai_suggested_response,
         "sla_deadline": ticket.sla_deadline.isoformat() + "Z",
         "escalation_level": ticket.escalation_level,
@@ -115,67 +115,55 @@ def get_ticket_details(id):
     }))
 
 def get_staff_per_dept(dept_name):
-    dept = Department.query.filter_by(name=dept_name).first()
-    if not dept:
-        return jsonify(format_response("error", message="Department not found")), 404
-    
-    staff_list = Staff.query.filter_by(department_id=dept.id).all()
+    staff_list = User.query.filter_by(department=dept_name, role='staff').all()
     result = []
     for s in staff_list:
-        # Load Meter Rules: (activeTickets / maxTicketsPerStaff) × 100
         max_tickets = 10
-        load_pct = min(100, (s.active_ticket_count / max_tickets) * 100)
-        
-        # Hybrid Scoring for suggestion explanation
-        score = (s.active_ticket_count * 3) + (s.avg_resolution_time * 1.5) - (s.performance_rating * 2)
+        load_pct = min(100, (s.active_tasks / max_tickets) * 100)
+        score = (s.active_tasks * 4) + (s.avg_resolution_time / 10) - (s.performance_rating * 2)
         
         result.append({
             "id": s.id,
             "name": s.name,
             "designation": s.designation,
-            "active_tickets": s.active_ticket_count,
+            "active_tickets": s.active_tasks,
             "avg_res_time": round(s.avg_resolution_time),
             "performance_rating": s.performance_rating,
             "load_pct": round(load_pct),
             "ai_score": round(score, 1)
         })
-    
-    # Sort by AI score to show best suggestions first
     result.sort(key=lambda x: x['ai_score'])
     return jsonify(format_response("success", data=result))
 
 def assign_staff(id):
     data = request.get_json()
-    staff_id = data.get('staff_id')
-    notes = data.get('notes')
+    user_id = data.get('staff_id')
     
     ticket = Ticket.query.get(id)
     if not ticket:
         return jsonify(format_response("error", message="Ticket not found")), 404
 
-    # Handle unassigning old staff if any
-    if ticket.assigned_staff_id and ticket.assigned_staff_id != staff_id:
-        old_staff = Staff.query.get(ticket.assigned_staff_id)
-        if old_staff:
-            old_staff.active_ticket_count = max(0, old_staff.active_ticket_count - 1)
+    if ticket.assigned_user_id and ticket.assigned_user_id != user_id:
+        old_user = User.query.get(ticket.assigned_user_id)
+        if old_user:
+            old_user.active_tasks = max(0, old_user.active_tasks - 1)
 
-    staff = Staff.query.get(staff_id)
-    if not staff:
-        return jsonify(format_response("error", message="Staff not found")), 404
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify(format_response("error", message="User not found")), 404
     
     try:
         history = json.loads(ticket.status_history_log) if ticket.status_history_log else []
         history.append({
             "status": "In Progress",
             "timestamp": datetime.utcnow().isoformat() + "Z",
-            "action": f"Assigned to {staff.name} (Admin Override)" if ticket.assigned_staff_id else f"Assigned to {staff.name}"
+            "action": f"Assigned to {user.name}"
         })
         
-        ticket.assigned_staff_id = staff.id
+        ticket.assigned_user_id = user.id
         ticket.status = "In Progress"
-        ticket.internal_notes = notes
         ticket.status_history_log = json.dumps(history)
-        staff.active_ticket_count += 1
+        user.active_tasks += 1
         
         db.session.commit()
         return jsonify(format_response("success", message="Staff assigned successfully"))
@@ -191,7 +179,6 @@ def regenerate_response(id):
     suggestion = ai_responder.generate_suggestion(ticket, ticket.feedback)
     ticket.ai_suggested_response = suggestion['response']
     
-    # Log regeneration
     log = AIResponseLog(ticket_id=ticket.id, draft_content=suggestion['response'], action_taken="Regenerated")
     db.session.add(log)
     db.session.commit()
@@ -208,10 +195,6 @@ def approve_response(id):
         
     log = AIResponseLog(ticket_id=ticket.id, draft_content=final_content, action_taken="Approved")
     db.session.add(log)
-    
-    # In a real app, send actual email/SMS here
-    app_logger.info(f"Response approved for ticket {id}: {final_content[:50]}...")
-    
     db.session.commit()
     return jsonify(format_response("success", message="Response approved and sent"))
 
@@ -231,18 +214,113 @@ def resolve_ticket(id):
         history.append({
             "status": "Resolved",
             "timestamp": now.isoformat() + "Z",
-            "action": "Marked as Resolved by Admin"
+            "action": "Marked as Resolved"
         })
         ticket.status_history_log = json.dumps(history)
         
-        if ticket.assigned_staff:
-            ticket.assigned_staff.active_ticket_count = max(0, ticket.assigned_staff.active_ticket_count - 1)
+        if ticket.assigned_to_user:
+            ticket.assigned_to_user.active_tasks = max(0, ticket.assigned_to_user.active_tasks - 1)
             
         db.session.commit()
         return jsonify(format_response("success", message="Ticket resolved successfully"))
     except Exception as e:
         db.session.rollback()
         return jsonify(format_response("error", message=str(e))), 500
+
+# --- STAFF PORTAL ENDPOINTS ---
+
+def get_staff_profile():
+    user = current_user
+    max_tickets = 10
+    load_pct = min(100, (user.active_tasks / max_tickets) * 100)
+    
+    return jsonify(format_response("success", data={
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "role": user.role,
+        "department": user.department,
+        "designation": user.designation,
+        "active_tasks": user.active_tasks,
+        "avg_res_time": round(user.avg_resolution_time),
+        "success_rate": user.performance_rating,
+        "load_pct": round(load_pct)
+    }))
+
+def get_staff_tasks():
+    # Return any active task assigned to the current user (Open or In Progress)
+    tickets = Ticket.query.filter(
+        Ticket.assigned_user_id == current_user.id,
+        Ticket.status.in_(['Open', 'In Progress', 'Escalated'])
+    ).order_by(Ticket.sla_deadline.asc()).all()
+    
+    result = []
+    for t in tickets:
+        result.append({
+            "id": t.id,
+            "feedback_id": t.feedback_id,
+            "patient_id": t.feedback.patient_id,
+            "feedback_text": t.feedback.feedback_text,
+            "severity": t.severity,
+            "status": t.status,
+            "sentiment": t.feedback.sentiment,
+            "sla_deadline": t.sla_deadline.isoformat() + "Z",
+            "ai_suggestion": t.ai_suggested_response
+        })
+    return jsonify(format_response("success", data=result))
+
+def complete_staff_task(id):
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        notes = data.get('notes', '').strip()
+        
+        ticket = Ticket.query.get(id)
+        if not ticket:
+            return jsonify(format_response("error", message="Ticket not found")), 404
+        
+        # Allow resolution if ticket is assigned to this user OR if it's unassigned in their department
+        if ticket.assigned_user_id is not None and ticket.assigned_user_id != current_user.id:
+            app_logger.warning(f"Staff {current_user.id} attempted to resolve ticket {id} assigned to user {ticket.assigned_user_id}")
+            return jsonify(format_response("error", message="You are not assigned to this ticket")), 403
+        
+        if ticket.status == 'Resolved':
+            return jsonify(format_response("error", message="Ticket is already resolved")), 400
+        
+        now = datetime.utcnow()
+        ticket.status = "Resolved"
+        ticket.resolved_at = now
+        ticket.resolution_notes = notes
+        
+        # Assign to this user if not already assigned
+        if ticket.assigned_user_id is None:
+            ticket.assigned_user_id = current_user.id
+        
+        delta = now - ticket.feedback.created_at
+        ticket.resolution_time = int(delta.total_seconds() / 60)
+        
+        history = json.loads(ticket.status_history_log) if ticket.status_history_log else []
+        history.append({
+            "status": "Resolved",
+            "timestamp": now.isoformat() + "Z",
+            "action": f"Resolved by {current_user.name}",
+            "notes": notes
+        })
+        ticket.status_history_log = json.dumps(history)
+        
+        # Decrement current user's active task count
+        staff_user = User.query.get(current_user.id)
+        if staff_user:
+            staff_user.active_tasks = max(0, staff_user.active_tasks - 1)
+        
+        db.session.commit()
+        app_logger.info(f"Ticket {id} resolved by staff user {current_user.id} ({current_user.name})")
+        return jsonify(format_response("success", message="Ticket resolved successfully", data={"ticket_id": id}))
+    except Exception as e:
+        db.session.rollback()
+        app_logger.error(f"Error resolving ticket {id}: {e}")
+        return jsonify(format_response("error", message=str(e))), 500
+
+# --- OTHER ENDPOINTS ---
 
 def get_department_performance():
     try:
@@ -254,12 +332,14 @@ def get_department_performance():
             avg_res_time = sum([t.resolution_time for t in resolved_tickets]) / len(resolved_tickets) if resolved_tickets else 0
             sla_breaches = Ticket.query.filter_by(department_id=dept.id, escalation_flag=True).count()
             
+            staff_in_dept = User.query.filter_by(department=dept.name, role='staff').all()
+            
             performance.append({
                 "department": dept.name,
                 "totalTickets": total_tickets,
                 "avgResolutionTime": round(avg_res_time, 1),
                 "slaBreachPct": round((sla_breaches / total_tickets * 100) if total_tickets > 0 else 0, 1),
-                "staffLoad": [{"name": s.name, "active": s.active_ticket_count, "load": round(min(100, (s.active_ticket_count/10)*100))} for s in dept.staff]
+                "staffLoad": [{"name": s.name, "active": s.active_tasks, "load": round(min(100, (s.active_tasks/10)*100))} for s in staff_in_dept]
             })
         return jsonify(format_response("success", data=performance))
     except Exception as e:

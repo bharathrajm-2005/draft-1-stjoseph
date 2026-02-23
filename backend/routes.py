@@ -12,8 +12,12 @@ from .controllers import (
     get_incident_trend,
     check_sla,
     regenerate_response,
-    approve_response
+    approve_response,
+    get_staff_profile,
+    get_staff_tasks,
+    complete_staff_task
 )
+from utils.helpers import staff_required
 
 api_bp = Blueprint('api', __name__)
 
@@ -30,3 +34,8 @@ api_bp.route('/analytics/performance', methods=['GET'])(get_department_performan
 api_bp.route('/analytics/heatmap', methods=['GET'])(get_heatmap_data)
 api_bp.route('/analytics/trend', methods=['GET'])(get_incident_trend)
 api_bp.route('/sla/check', methods=['POST'])(check_sla)
+
+# Staff Portal APIs (Protected)
+api_bp.route('/staff/profile', methods=['GET'])(staff_required(get_staff_profile))
+api_bp.route('/staff/tasks', methods=['GET'])(staff_required(get_staff_tasks))
+api_bp.route('/staff/complete/<int:id>', methods=['POST'])(staff_required(complete_staff_task))

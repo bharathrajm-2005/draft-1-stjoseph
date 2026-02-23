@@ -6,7 +6,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     // Configuration & State
     const API_BASE_URL = '/api';
-    const REFRESH_INTERVAL = 30000;
+    const REFRESH_INTERVAL = 10000; // 10 seconds — catches staff resolutions quickly
     let activeTickets = [];
     let currentTicketId = null;
     let refreshTimer = null;
@@ -112,12 +112,17 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadMetrics() {
         try {
             const res = await fetch(`${API_BASE_URL}/stats/dashboard`);
-            const { data } = await res.json();
-            elements.metrics.active.textContent = data.activeTickets;
-            elements.metrics.rating.textContent = data.averageRating;
-            elements.metrics.critical.textContent = data.criticalCases;
-            elements.metrics.wait.textContent = data.waitTimeAlert;
-        } catch (e) { console.error('Metrics Load Error:', e); }
+            const json = await res.json();
+            if (json.status === 'success') {
+                const { data } = json;
+                elements.metrics.active.textContent = data.activeTickets || 0;
+                elements.metrics.rating.textContent = data.averageRating || 0;
+                elements.metrics.critical.textContent = data.criticalCases || 0;
+                elements.metrics.wait.textContent = data.waitTimeAlert || 0;
+            } else {
+                console.error('Metrics Error:', json.message);
+            }
+        } catch (e) { console.error('Metrics Fetch Error:', e); }
     }
 
     async function loadTickets() {
@@ -125,12 +130,19 @@ document.addEventListener('DOMContentLoaded', () => {
             showLoading(true);
             const params = new URLSearchParams(filters);
             const res = await fetch(`${API_BASE_URL}/tickets?${params}`);
-            const { data } = await res.json();
-            activeTickets = data;
-            renderTicketGrid();
+            const json = await res.json();
+
+            if (json.status === 'success') {
+                activeTickets = json.data || [];
+                renderTicketGrid();
+            } else {
+                console.error('Tickets Error:', json.message);
+                elements.ticketGrid.innerHTML = `<div class="error-state">Error: ${json.message}</div>`;
+            }
             showLoading(false);
         } catch (e) {
-            console.error('Tickets Load Error:', e);
+            console.error('Tickets Fetch Error:', e);
+            elements.ticketGrid.innerHTML = `<div class="error-state">Connection failed. Check server status.</div>`;
             showLoading(false);
         }
     }
