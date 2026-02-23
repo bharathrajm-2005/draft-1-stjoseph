@@ -27,18 +27,40 @@ class Department(db.Model):
     name = db.Column(db.String(50), unique=True, nullable=False)
     tickets = db.relationship('Ticket', backref='department_rel', lazy=True)
 
+class Appointment(db.Model):
+    __tablename__ = 'appointments'
+    id = db.Column(db.Integer, primary_key=True)
+    patient_name = db.Column(db.String(100), nullable=False)
+    patient_email = db.Column(db.String(100), nullable=False)
+    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=False)
+    doctor_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    appointment_date = db.Column(db.String(20), nullable=False)
+    time_slot = db.Column(db.String(20), nullable=False)
+    # Allowed: Scheduled | In Progress | Completed | Cancelled
+    status = db.Column(db.String(20), default='Scheduled')
+    completed_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    department = db.relationship('Department', backref='appointments', lazy=True)
+    doctor = db.relationship('User', backref='appointments', lazy=True)
+
 class Feedback(db.Model):
     __tablename__ = 'feedback'
     id = db.Column(db.Integer, primary_key=True)
     patient_id = db.Column(db.String(50), nullable=False)
+    patient_name = db.Column(db.String(100))
+    patient_email = db.Column(db.String(100))
     feedback_text = db.Column(db.Text, nullable=False)
     sentiment = db.Column(db.String(20))
     sentiment_score = db.Column(db.Float)
     rating = db.Column(db.Integer)
     issue_type = db.Column(db.String(50))
     severity = db.Column(db.String(20))
+    is_verified = db.Column(db.Boolean, default=False)
+    appointment_id = db.Column(db.Integer, db.ForeignKey('appointments.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     tickets = db.relationship('Ticket', backref='feedback', lazy=True)
+    appointment = db.relationship('Appointment', backref='feedbacks', lazy=True)
 
 class Ticket(db.Model):
     __tablename__ = 'tickets'

@@ -15,13 +15,25 @@ from .controllers import (
     approve_response,
     get_staff_profile,
     get_staff_tasks,
-    complete_staff_task
+    complete_staff_task,
+    # Appointment endpoints
+    book_appointment,
+    get_departments_list,
+    get_doctors_by_dept,
+    get_appointments,
+    update_appointment_status,
 )
-from utils.helpers import staff_required
+from utils.helpers import staff_required, admin_required
 
 api_bp = Blueprint('api', __name__)
 
+# === PUBLIC ENDPOINTS ===
 api_bp.route('/submit-feedback', methods=['POST'])(submit_feedback)
+api_bp.route('/appointments', methods=['POST'])(book_appointment)
+api_bp.route('/appointments/departments', methods=['GET'])(get_departments_list)
+api_bp.route('/appointments/departments/<int:dept_id>/doctors', methods=['GET'])(get_doctors_by_dept)
+
+# === ADMIN ENDPOINTS ===
 api_bp.route('/stats/dashboard', methods=['GET'])(get_dashboard_stats)
 api_bp.route('/tickets', methods=['GET'])(get_tickets)
 api_bp.route('/tickets/<int:id>', methods=['GET'])(get_ticket_details)
@@ -33,9 +45,11 @@ api_bp.route('/departments/<string:dept_name>/staff', methods=['GET'])(get_staff
 api_bp.route('/analytics/performance', methods=['GET'])(get_department_performance)
 api_bp.route('/analytics/heatmap', methods=['GET'])(get_heatmap_data)
 api_bp.route('/analytics/trend', methods=['GET'])(get_incident_trend)
+api_bp.route('/analytics/appointments', methods=['GET'])(admin_required(get_appointments))
+api_bp.route('/admin/appointments/<int:appt_id>/status', methods=['PUT'])(admin_required(update_appointment_status))
 api_bp.route('/sla/check', methods=['POST'])(check_sla)
 
-# Staff Portal APIs (Protected)
+# === STAFF PORTAL APIS (Protected) ===
 api_bp.route('/staff/profile', methods=['GET'])(staff_required(get_staff_profile))
 api_bp.route('/staff/tasks', methods=['GET'])(staff_required(get_staff_tasks))
 api_bp.route('/staff/complete/<int:id>', methods=['POST'])(staff_required(complete_staff_task))

@@ -1,11 +1,15 @@
-from flask import Flask, render_template, redirect, url_for, request, flash
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_mail import Mail
 from config import Config
 from database.db import init_db
 from database.models import db, User
 from backend.routes import api_bp
 from utils.logger import app_logger
 from flask_cors import CORS
+
+# Global mail instance accessible from controllers
+mail = Mail()
 
 def create_app():
     app = Flask(__name__)
@@ -21,6 +25,9 @@ def create_app():
     login_manager = LoginManager()
     login_manager.login_view = 'login'
     login_manager.init_app(app)
+
+    # Initialize Flask-Mail
+    mail.init_app(app)
 
     @login_manager.user_loader
     def load_user(user_id):
@@ -39,7 +46,7 @@ def create_app():
             email = request.form.get('email')
             password = request.form.get('password')
             user = User.query.filter_by(email=email).first()
-            if user and user.password == password: # In production use hashed passwords
+            if user and user.password == password:
                 login_user(user)
                 if user.role == 'admin':
                     return redirect(url_for('admin_dashboard'))

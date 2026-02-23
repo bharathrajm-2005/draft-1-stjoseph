@@ -1,11 +1,12 @@
-from flask import request, jsonify
+from flask import request, jsonify, current_app
 from datetime import datetime, timedelta
 from sqlalchemy import func, case
 from flask_login import current_user
 from services.recovery_service import RecoveryService
 from services.sla_tracker import SLATracker
 from services.ai_response_service import AIResponseService
-from database.models import Feedback, Ticket, Department, User, db, EscalationLog, AIResponseLog
+from services.email_service import send_appointment_confirmation
+from database.models import Feedback, Ticket, Department, User, Appointment, db, EscalationLog, AIResponseLog
 from utils.helpers import format_response
 from utils.logger import app_logger
 import json
@@ -20,19 +21,90 @@ def submit_feedback():
         return jsonify(format_response("error", message="Missing required fields")), 400
     
     try:
+        patient_email = (data.get('email') or '').strip().lower()
+        patient_name  = (data.get('name')  or '').strip()
+        
+        # ── Step 1: AI pipeline – commits its own session internally ──────
         feedback = recovery_service.process_new_feedback(
-            data['patient_id'], 
+            data['patient_id'],
             data['feedback_text'],
             rating=data.get('rating')
         )
+        feedback_id = feedback.id  # capture id before session expires
+
+        # ── Step 2: Re-query cleanly and enrich with name / email / verified
+        feedback = Feedback.query.get(feedback_id)
+        feedback.patient_name  = patient_name
+        feedback.patient_email = patient_email
+
+        # === VERIFIED FEEDBACK INTELLIGENCE ===
+        is_verified        = False
+        linked_doctor_name = None
+
+        if patient_email:
+            appt = Appointment.query.filter(
+                func.lower(Appointment.patient_email) == patient_email,
+                Appointment.status == 'Completed'   # ← ONLY completed = verified
+            ).order_by(Appointment.created_at.desc()).first()
+
+            if appt:
+                is_verified             = True
+                feedback.is_verified    = True
+                feedback.appointment_id = appt.id
+                if appt.doctor:
+                    linked_doctor_name = appt.doctor.name
+
+                # === PRIORITY BOOST RULE ===
+                # If verified, reduce SLA time by 30%
+                ticket = Ticket.query.filter_by(feedback_id=feedback_id).first()
+                if ticket:
+                    # Original SLA duration in seconds
+                    total_seconds = (ticket.sla_deadline - feedback.created_at).total_seconds()
+                    # 30% reduction: new deadline = created_at + (70% of original duration)
+                    new_deadline = feedback.created_at + timedelta(seconds=total_seconds * 0.7)
+                    ticket.sla_deadline = new_deadline
+
+                    history = json.loads(ticket.status_history_log) if ticket.status_history_log else []
+                    
+                    # Re-assign ticket to appointing doctor if they are staff
+                    if appt.doctor_id:
+                        doctor = User.query.get(appt.doctor_id)
+                        if doctor and doctor.role == 'staff':
+                            if ticket.assigned_user_id != doctor.id:
+                                if ticket.assigned_user_id:
+                                    old = User.query.get(ticket.assigned_user_id)
+                                    if old:
+                                        old.active_tasks = max(0, old.active_tasks - 1)
+                                ticket.assigned_user_id = doctor.id
+                                ticket.status = 'In Progress'
+                                doctor.active_tasks = (doctor.active_tasks or 0) + 1
+
+                            history.append({
+                                "status":    ticket.status,
+                                "timestamp": datetime.utcnow().isoformat() + "Z",
+                                "action":    f"✅ VERIFIED – linked to Appointment #{appt.id}, doctor: {linked_doctor_name or 'N/A'}"
+                            })
+
+                    history.append({
+                        "status":    ticket.status,
+                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                        "action":    "🚀 PRIORITY BOOST – SLA reduced by 30% (Verified Patient)"
+                    })
+                    ticket.status_history_log = json.dumps(history)
+
+        db.session.commit()
+
         return jsonify(format_response("success", data={
-            "id": feedback.id,
-            "sentiment": feedback.sentiment,
+            "id":              feedback.id,
+            "sentiment":       feedback.sentiment,
             "sentiment_score": feedback.sentiment_score,
-            "issue_type": feedback.issue_type,
-            "severity": feedback.severity
+            "issue_type":      feedback.issue_type,
+            "severity":        feedback.severity,
+            "is_verified":     is_verified,
+            "linked_doctor":   linked_doctor_name
         })), 201
     except Exception as e:
+        db.session.rollback()
         app_logger.error(f"Error in submit_feedback: {e}")
         return jsonify(format_response("error", message=str(e))), 500
 
@@ -79,10 +151,15 @@ def get_tickets():
             result.append({
                 "id": t.id,
                 "patient_id": t.feedback.patient_id,
+                "patient_name": t.feedback.patient_name or "",
+                "patient_email": t.feedback.patient_email or "",
                 "department": t.department_rel.name,
                 "severity": t.severity,
                 "sentiment": t.feedback.sentiment,
                 "status": t.status,
+                "is_verified": bool(t.feedback.is_verified),
+                "assigned_staff": t.assigned_to_user.name if t.assigned_to_user else "Unassigned",
+                "assigned_staff_id": t.assigned_user_id,
                 "sla_deadline": t.sla_deadline.isoformat() + "Z",
                 "escalation_level": t.escalation_level,
                 "created_at": t.feedback.created_at.isoformat() + "Z"
@@ -96,18 +173,40 @@ def get_ticket_details(id):
     if not ticket:
         return jsonify(format_response("error", message="Ticket not found")), 404
     
+    # Build assigned staff info from ticket directly (avoids dept-mismatch)
+    assigned_staff_info = None
+    if ticket.assigned_to_user:
+        s = ticket.assigned_to_user
+        max_t = 10
+        load_pct = min(100, (s.active_tasks / max_t) * 100)
+        score = (s.active_tasks * 4) + (s.avg_resolution_time / 10) - (s.performance_rating * 2)
+        assigned_staff_info = {
+            "id":                 s.id,
+            "name":               s.name,
+            "designation":        s.designation,
+            "active_tickets":     s.active_tasks,
+            "avg_res_time":       round(s.avg_resolution_time),
+            "performance_rating": s.performance_rating,
+            "load_pct":           round(load_pct),
+            "ai_score":           round(score, 1)
+        }
+
     return jsonify(format_response("success", data={
         "id": ticket.id,
         "patient_id": ticket.feedback.patient_id,
+        "patient_name": ticket.feedback.patient_name or "",
+        "patient_email": ticket.feedback.patient_email or "",
         "department": ticket.department_rel.name,
         "sentiment": ticket.feedback.sentiment,
         "severity": ticket.severity,
         "feedback_text": ticket.feedback.feedback_text,
         "created_at": ticket.feedback.created_at.isoformat() + "Z",
         "status": ticket.status,
+        "is_verified": bool(ticket.feedback.is_verified),
         "assigned_staff": ticket.assigned_to_user.name if ticket.assigned_to_user else "Unassigned",
         "assigned_staff_id": ticket.assigned_user_id,
-        "internal_notes": ticket.ai_suggested_response, # AI response is internal note now
+        "assigned_staff_info": assigned_staff_info,
+        "internal_notes": ticket.ai_suggested_response,
         "ai_suggested_response": ticket.ai_suggested_response,
         "sla_deadline": ticket.sla_deadline.isoformat() + "Z",
         "escalation_level": ticket.escalation_level,
@@ -366,3 +465,147 @@ def get_incident_trend():
 def check_sla():
     sla_tracker.check_breaches()
     return jsonify(format_response("success", message="SLA Check Complete"))
+
+# =============================================
+#   APPOINTMENT BOOKING ENDPOINTS
+# =============================================
+
+def get_departments_list():
+    """Return all departments for the booking form dropdown."""
+    try:
+        departments = Department.query.order_by(Department.name).all()
+        return jsonify(format_response("success", data=[
+            {"id": d.id, "name": d.name} for d in departments
+        ]))
+    except Exception as e:
+        return jsonify(format_response("error", message=str(e))), 500
+
+def get_doctors_by_dept(dept_id):
+    """Return staff doctors in a given department for the booking form."""
+    try:
+        dept = Department.query.get(dept_id)
+        if not dept:
+            return jsonify(format_response("error", message="Department not found")), 404
+        doctors = User.query.filter_by(department=dept.name, role='staff').all()
+        return jsonify(format_response("success", data=[
+            {"id": d.id, "name": d.name, "designation": d.designation or "Specialist"} for d in doctors
+        ]))
+    except Exception as e:
+        return jsonify(format_response("error", message=str(e))), 500
+
+def book_appointment():
+    """Book a new patient appointment and send email confirmation."""
+    data = request.get_json(force=True, silent=True) or {}
+
+    required = ['patient_name', 'patient_email', 'department_id', 'appointment_date', 'time_slot']
+    missing = [f for f in required if not data.get(f)]
+    if missing:
+        return jsonify(format_response("error", message=f"Missing fields: {', '.join(missing)}")), 400
+
+    try:
+        dept = Department.query.get(data['department_id'])
+        if not dept:
+            return jsonify(format_response("error", message="Invalid department")), 400
+
+        doctor_id = data.get('doctor_id') or None
+        if doctor_id:
+            doctor = User.query.get(doctor_id)
+            if not doctor or doctor.role != 'staff':
+                doctor_id = None
+
+        appt = Appointment(
+            patient_name=data['patient_name'].strip(),
+            patient_email=data['patient_email'].strip().lower(),
+            department_id=dept.id,
+            doctor_id=doctor_id,
+            appointment_date=data['appointment_date'],
+            time_slot=data['time_slot'],
+            status='Scheduled'
+        )
+        db.session.add(appt)
+        db.session.commit()
+
+        # Send email confirmation (non-blocking — logs on failure)
+        from app import mail
+        doctor_name = User.query.get(doctor_id).name if doctor_id else None
+        send_appointment_confirmation(mail, appt, dept.name, doctor_name)
+
+        app_logger.info(f"Appointment #{appt.id} booked: {appt.patient_name} -> {dept.name} on {appt.appointment_date}")
+
+        return jsonify(format_response("success",
+            message="Appointment booked successfully",
+            data={
+                "appointment_id": appt.id,
+                "patient_name": appt.patient_name,
+                "department": dept.name,
+                "doctor": doctor_name or "To be assigned",
+                "date": appt.appointment_date,
+                "time": appt.time_slot,
+                "status": appt.status
+            }
+        )), 201
+    except Exception as e:
+        db.session.rollback()
+        app_logger.error(f"Appointment booking error: {e}")
+        return jsonify(format_response("error", message=str(e))), 500
+
+def get_appointments():
+    """Get all appointments for admin view (most recent first)."""
+    try:
+        appointments = Appointment.query.order_by(Appointment.created_at.desc()).all()
+        result = []
+        for a in appointments:
+            result.append({
+                "id":               a.id,
+                "patient_name":     a.patient_name,
+                "patient_email":    a.patient_email,
+                "department":       a.department.name,
+                "department_id":    a.department_id,
+                "doctor":           a.doctor.name if a.doctor else None,
+                "doctor_id":        a.doctor_id,
+                "appointment_date": a.appointment_date,
+                "time_slot":        a.time_slot,
+                "status":           a.status,
+                "completed_at":     a.completed_at.isoformat() + "Z" if a.completed_at else None,
+                "created_at":       a.created_at.isoformat() + "Z"
+            })
+        return jsonify(format_response("success", data=result))
+    except Exception as e:
+        return jsonify(format_response("error", message=str(e))), 500
+
+
+VALID_APPT_STATUSES = {'Scheduled', 'In Progress', 'Completed', 'Cancelled'}
+
+def update_appointment_status(appt_id):
+    """PUT /api/admin/appointments/<id>/status — update status and set completed_at."""
+    data = request.get_json(force=True, silent=True) or {}
+    new_status = (data.get('status') or '').strip()
+
+    if new_status not in VALID_APPT_STATUSES:
+        return jsonify(format_response("error",
+            message=f"Invalid status '{new_status}'. Allowed: {', '.join(sorted(VALID_APPT_STATUSES))}"
+        )), 400
+
+    appt = Appointment.query.get(appt_id)
+    if not appt:
+        return jsonify(format_response("error", message="Appointment not found")), 404
+
+    old_status = appt.status
+    appt.status = new_status
+
+    if new_status == 'Completed' and not appt.completed_at:
+        appt.completed_at = datetime.utcnow()
+    elif new_status != 'Completed':
+        appt.completed_at = None  # reset if rolling back
+
+    db.session.commit()
+    app_logger.info(f"Appointment #{appt_id} status: {old_status} → {new_status}")
+
+    return jsonify(format_response("success",
+        message=f"Appointment #{appt_id} updated to '{new_status}'",
+        data={
+            "id":           appt.id,
+            "status":       appt.status,
+            "completed_at": appt.completed_at.isoformat() + "Z" if appt.completed_at else None
+        }
+    ))

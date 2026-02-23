@@ -33,13 +33,15 @@ document.addEventListener('DOMContentLoaded', () => {
             statusFilter: document.getElementById('filterStatus'),
             viewAnalytics: document.getElementById('showAnalyticsBtn'),
             viewHeatmap: document.getElementById('showHeatmapBtn'),
+            viewAppointments: document.getElementById('showAppointmentsBtn'),
             refreshBtn: document.getElementById('refreshBtn'),
             lastUpdate: document.getElementById('lastUpdate')
         },
         views: {
             ticketView: document.querySelector('.ticket-view'),
             analyticsView: document.getElementById('analyticsSection'),
-            heatmapView: document.getElementById('heatmapSection')
+            heatmapView: document.getElementById('heatmapSection'),
+            appointmentsView: document.getElementById('appointmentsSection')
         },
         detailPanel: {
             panel: document.getElementById('detailPanel'),
@@ -89,12 +91,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         elements.sidebar.viewAnalytics.addEventListener('click', () => switchView('analytics'));
         elements.sidebar.viewHeatmap.addEventListener('click', () => switchView('heatmap'));
+        if (elements.sidebar.viewAppointments)
+            elements.sidebar.viewAppointments.addEventListener('click', () => switchView('appointments'));
         elements.sidebar.refreshBtn.addEventListener('click', loadDashboardState);
 
         const closeAnalytics = document.getElementById('closeAnalytics');
         const closeHeatmap = document.getElementById('closeHeatmap');
+        const closeAppointments = document.getElementById('closeAppointments');
         if (closeAnalytics) closeAnalytics.addEventListener('click', () => switchView('tickets'));
         if (closeHeatmap) closeHeatmap.addEventListener('click', () => switchView('tickets'));
+        if (closeAppointments) closeAppointments.addEventListener('click', () => switchView('tickets'));
 
         elements.detailPanel.close.addEventListener('click', closeDetailPanel);
         elements.detailPanel.overlay.addEventListener('click', closeDetailPanel);
@@ -172,6 +178,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const isResolved = ticket.status === 'Resolved';
             let stateClass = isResolved ? 'state-resolved' : (isBreached ? 'state-breached' : 'state-pending');
             const slaDisplay = isResolved ? 'COMPLETED' : getSLAStatus(ticket.sla_deadline);
+            const verifiedBadge = ticket.is_verified
+                ? `<div class="verified-pill">🟢 Verified Patient</div>`
+                : `<div class="anonymous-pill">🟡 Anonymous</div>`;
 
             return `
                 <div class="ticket-card ${stateClass}" onclick="openTicketDetails(${ticket.id})">
@@ -182,6 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="ticket-card-body">
                         <h3>Patient: ${ticket.patient_id}</h3>
                         <p class="status-summary">Status: <strong>${ticket.status}</strong></p>
+                        ${verifiedBadge}
                     </div>
                     <div class="ticket-card-footer">
                         <span>${formatTimeAgo(ticket.created_at)}</span>
@@ -225,18 +235,62 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.detailPanel.overlay.classList.add('active');
             updatePanelSLA(data.sla_deadline, data.status);
 
-            // MANDATORY 1 SECOND AI DELAY
-            setTimeout(async () => {
-                const staffRes = await fetch(`${API_BASE_URL}/departments/${data.department}/staff`);
-                const staffData = await staffRes.json();
-                const assignedStaff = staffData.data.find(s => s.id === data.assigned_staff_id);
+            // ── Verified Feedback Banner ──────────────────────────────────
+            let verifiedBanner = document.getElementById('panelVerifiedBanner');
+            if (!verifiedBanner) {
+                verifiedBanner = document.createElement('div');
+                verifiedBanner.id = 'panelVerifiedBanner';
+                verifiedBanner.style.cssText = `
+                    background: linear-gradient(135deg,#0d9488,#059669);
+                    color:#fff; border-radius:8px; padding:10px 14px;
+                    font-size:13px; font-weight:600; margin-bottom:12px;
+                    display:flex; gap:8px; align-items:center;
+                `;
+                const patientSection = document.querySelector('#detailPanel .panel-section');
+                if (patientSection) patientSection.prepend(verifiedBanner);
+            }
+            if (data.is_verified) {
+                verifiedBanner.style.background = 'linear-gradient(135deg,#0d9488,#059669)';
+                verifiedBanner.style.display = 'flex';
+                verifiedBanner.innerHTML = `
+                    <span style="font-size:18px">🟢</span>
+                    <div>
+                        <div>VERIFIED PATIENT</div>
+                        <div style="font-weight:400;font-size:12px;opacity:.85">Linked via Completed Appointment &middot; ${data.patient_email || ''}</div>
+                    </div>
+                `;
+            } else {
+                verifiedBanner.style.background = '#f1f5f9';
+                verifiedBanner.style.color = '#64748b';
+                verifiedBanner.style.display = 'flex';
+                verifiedBanner.innerHTML = `
+                    <span style="font-size:18px">🟡</span>
+                    <div>
+                        <div>ANONYMOUS FEEDBACK</div>
+                        <div style="font-weight:400;font-size:12px;opacity:.85">No completed appointment found / Not verified</div>
+                    </div>
+                `;
+            }
 
-                if (assignedStaff) {
-                    displayAssignedDoctor(assignedStaff);
+            // ── Staff Assignment: use data embedded in ticket (no secondary fetch) ─
+            setTimeout(() => {
+                if (data.assigned_staff_info) {
+                    displayAssignedDoctor(data.assigned_staff_info);
+                } else if (data.assigned_staff && data.assigned_staff !== 'Unassigned') {
+                    // Fallback: show minimal card from name string
+                    displayAssignedDoctor({
+                        name: data.assigned_staff,
+                        designation: 'Staff',
+                        active_tickets: 0,
+                        avg_res_time: 0,
+                        performance_rating: 0,
+                        load_pct: 0,
+                        ai_score: 0
+                    });
                 } else {
-                    elements.detailPanel.aiAssigningStatus.innerHTML = "⚠️ No Specialist Available in Dept.";
+                    elements.detailPanel.aiAssigningStatus.innerHTML = '⚠️ No doctor assigned yet – ticket is in open queue.';
                 }
-            }, 1000);
+            }, 800);
 
             if (data.status === 'Resolved') {
                 document.getElementById('aiResponseSection').style.display = 'none';
@@ -335,13 +389,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function switchView(viewName) {
-        Object.values(elements.views).forEach(v => v.classList.add('hidden'));
+        Object.values(elements.views).forEach(v => { if (v) v.classList.add('hidden'); });
         if (viewName === 'analytics') {
             elements.views.analyticsView.classList.remove('hidden');
             renderAnalytics();
         } else if (viewName === 'heatmap') {
             elements.views.heatmapView.classList.remove('hidden');
             renderHeatmap();
+        } else if (viewName === 'appointments') {
+            elements.views.appointmentsView.classList.remove('hidden');
+            loadAppointments();
         } else {
             elements.views.ticketView.classList.remove('hidden');
         }
@@ -374,6 +431,102 @@ document.addEventListener('DOMContentLoaded', () => {
             y: depts, z: z, type: 'heatmap', colorscale: [['0.0', '#f8fafc'], ['1.0', '#000000']]
         }], { height: 450 });
     }
+
+    async function loadAppointments() {
+        const body = document.getElementById('appointmentsListBody');
+        if (!body) return;
+        body.innerHTML = '<tr><td colspan="7" class="loading-state"><div class="spinner"></div><p>Fetching appointments…</p></td></tr>';
+        try {
+            const res = await fetch(`${API_BASE_URL}/analytics/appointments`);
+            const json = await res.json();
+            const rows = json.data || [];
+
+            // Summary badges
+            const counts = { Scheduled: 0, 'In Progress': 0, Completed: 0, Cancelled: 0 };
+            rows.forEach(a => { if (counts[a.status] !== undefined) counts[a.status]++; });
+            const badgesEl = document.getElementById('apptSummaryBadges');
+            if (badgesEl) {
+                const colors = { Scheduled: '#3b82f6', 'In Progress': '#f59e0b', Completed: '#10b981', Cancelled: '#ef4444' };
+                badgesEl.innerHTML = Object.entries(counts).map(([s, c]) =>
+                    `<span style="background:${colors[s]};color:#fff;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700">${s} (${c})</span>`
+                ).join('');
+            }
+
+            if (!rows.length) {
+                body.innerHTML = `<tr><td colspan="7" class="empty-state">No appointments yet.</td></tr>`;
+                return;
+            }
+
+            const STATUS_COLORS = {
+                'Scheduled': '#3b82f6',
+                'In Progress': '#f59e0b',
+                'Completed': '#10b981',
+                'Cancelled': '#ef4444'
+            };
+
+            body.innerHTML = rows.map(a => {
+                const isCompleted = a.status === 'Completed';
+                const opts = ['Scheduled', 'In Progress', 'Completed', 'Cancelled']
+                    .map(s => `<option value="${s}"${s === a.status ? ' selected' : ''}>${s}</option>`).join('');
+
+                return `
+                <tr id="appt-row-${a.id}" data-status="${a.status}">
+                    <td><span class="appt-id-list">#${String(a.id).padStart(4, '0')}</span></td>
+                    <td>
+                        <div style="font-weight:700;color:#1e293b">${a.patient_name}</div>
+                        <div style="font-size:11px;color:#64748b">${a.patient_email}</div>
+                    </td>
+                    <td><span class="list-dept-tag">${a.department}</span></td>
+                    <td style="font-size:13px">${a.doctor || '<em style="color:#cbd5e1">Pending</em>'}</td>
+                    <td>
+                        <div style="font-weight:600">${a.appointment_date}</div>
+                        <div style="font-size:12px;color:#64748b">${a.time_slot}</div>
+                    </td>
+                    <td>
+                        <div style="display:flex;align-items:center;gap:10px">
+                             <div class="status-indicator" style="background:${STATUS_COLORS[a.status]}"></div>
+                             <select class="appt-list-dropdown" onchange="updateApptStatus(${a.id}, this.value, this)">
+                                ${opts}
+                             </select>
+                        </div>
+                    </td>
+                    <td>
+                        ${isCompleted
+                        ? '<span class="verified-unlocked">✅ Verified Eligible</span>'
+                        : '<span class="verified-locked">🔒 Not Verified</span>'}
+                    </td>
+                </tr>`;
+            }).join('');
+
+        } catch (e) {
+            body.innerHTML = `<tr><td colspan="7" class="empty-state" style="color:#ef4444">⚠️ Error loading data</td></tr>`;
+        }
+    }
+
+    window.updateApptStatus = async function (apptId, newStatus, selectEl) {
+        const row = document.getElementById(`appt-row-${apptId}`);
+        const origValue = row ? row.dataset.status : newStatus;
+        if (selectEl) selectEl.disabled = true;
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/admin/appointments/${apptId}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            });
+            const json = await res.json();
+            if (json.status !== 'success') throw new Error(json.message || 'Update failed');
+
+            showToast(`Appointment #${apptId} → ${newStatus}`, 'success');
+            // Reload the cards to reflect new state (completed_at, verified banner etc.)
+            loadAppointments();
+        } catch (err) {
+            showToast(`Failed to update: ${err.message}`, 'error');
+            if (selectEl) { selectEl.value = origValue; selectEl.disabled = false; }
+        }
+    };
+
+
 
     function startSLAUpdates() {
         if (slaTimerInterval) clearInterval(slaTimerInterval);

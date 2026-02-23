@@ -70,6 +70,9 @@
                     <button id="showHeatmapBtn" class="nav-btn">
                         <span>🔥</span> Complaint Heatmap
                     </button>
+                    <button id="showAppointmentsBtn" class="nav-btn">
+                        <span>📅</span> Appointments
+                    </button>
                 </div>
 
                 <div class="sidebar-footer">
@@ -171,6 +174,46 @@
                     </div>
                     <div class="heatmap-container">
                         <div id="complaintHeatmap"></div>
+                    </div>
+                </section>
+
+                <!-- Appointments Section (Hidden by default) -->
+                <section class="content-section hidden" id="appointmentsSection">
+                    <div class="section-header">
+                        <div>
+                            <h2>📅 Patient Appointments</h2>
+                            <p style="color:#64748b;font-size:13px;margin-top:4px">
+                                Only <strong>Completed</strong> appointments unlock verified feedback. Update status via
+                                dropdown.
+                            </p>
+                        </div>
+                        <div style="display:flex;gap:10px;align-items:center">
+                            <div id="apptSummaryBadges" style="display:flex;gap:6px"></div>
+                            <button class="btn-close-view" id="closeAppointments">Back to Queue</button>
+                        </div>
+                    </div>
+                    <div class="appt-list-container">
+                        <table class="appt-list-table">
+                            <thead>
+                                <tr>
+                                    <th># ID</th>
+                                    <th>Patient</th>
+                                    <th>Department</th>
+                                    <th>Doctor</th>
+                                    <th>Date & Time</th>
+                                    <th>Status Control</th>
+                                    <th>Verification</th>
+                                </tr>
+                            </thead>
+                            <tbody id="appointmentsListBody">
+                                <tr>
+                                    <td colspan="7" class="loading-state">
+                                        <div class="spinner"></div>
+                                        <p>Loading appointments…</p>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </section>
             </div>

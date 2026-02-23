@@ -16,12 +16,12 @@ def seed_database():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    # 1. Clean up existing tables
-    tables = ['ai_response_logs', 'escalation_logs', 'tickets', 'feedback', 'users', 'departments']
+    # 1. Clean up existing tables (in dependency order)
+    tables = ['ai_response_logs', 'escalation_logs', 'tickets', 'feedback', 'appointments', 'users', 'departments']
     for table in tables:
         cursor.execute(f"DROP TABLE IF EXISTS {table}")
 
-    # 1. Create Tables
+    # 2. Create Tables
     cursor.execute("""
     CREATE TABLE departments (
         id INTEGER PRIMARY KEY,
@@ -43,16 +43,37 @@ def seed_database():
     )""")
 
     cursor.execute("""
+    CREATE TABLE appointments (
+        id INTEGER PRIMARY KEY,
+        patient_name VARCHAR(100) NOT NULL,
+        patient_email VARCHAR(100) NOT NULL,
+        department_id INTEGER NOT NULL,
+        doctor_id INTEGER,
+        appointment_date VARCHAR(20) NOT NULL,
+        time_slot VARCHAR(20) NOT NULL,
+        status VARCHAR(20) DEFAULT 'Scheduled',
+        completed_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(department_id) REFERENCES departments(id),
+        FOREIGN KEY(doctor_id) REFERENCES users(id)
+    )""")
+
+    cursor.execute("""
     CREATE TABLE feedback (
         id INTEGER PRIMARY KEY,
         patient_id VARCHAR(50) NOT NULL,
+        patient_name VARCHAR(100),
+        patient_email VARCHAR(100),
         feedback_text TEXT NOT NULL,
         sentiment VARCHAR(20),
         sentiment_score FLOAT,
         rating INTEGER,
         issue_type VARCHAR(50),
         severity VARCHAR(20),
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        is_verified BOOLEAN DEFAULT 0,
+        appointment_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(appointment_id) REFERENCES appointments(id)
     )""")
 
     cursor.execute("""
@@ -96,88 +117,125 @@ def seed_database():
         FOREIGN KEY(ticket_id) REFERENCES tickets(id)
     )""")
 
-    # 2. Seed Admin
+    # 3. Seed Admin
     cursor.execute("""
         INSERT INTO users (name, email, password, role, designation)
         VALUES ('Aurevia Admin', 'admin@aurevia.com', 'admin123', 'admin', 'Chief Operations Officer')
     """)
 
-    # 3. Seed Departments & Staff
+    # 4. Seed Departments & Staff
     departments = [
         "Emergency", "Cardiology", "Neurology", "Orthopedics", "Billing",
         "Pharmacy", "General Medicine", "Radiology", "ICU", "Administration"
     ]
 
+    first_names = ["Arjun", "Rajesh", "Priya", "Vikram", "Anjali", "Suresh", "Meena", "Vijay", "Anita", "Sunil", "Kavita", "Rohan", "Sonal", "Deepak", "Pooja", "Amit", "Rahul", "Neha", "Manish", "Swati"]
+    last_names  = ["Menon", "Kumar", "Sharma", "Singh", "Patel", "Reddy", "Iyer", "Nair", "Gupta", "Verma", "Joshi", "Das", "Bose", "Misra", "Malhotra"]
+
+    designations = {
+        "Emergency":        ["ER Specialist", "Trauma Surgeon", "Chief ER Physician"],
+        "Cardiology":       ["Senior Cardiologist", "Interventional Cardiologist", "Cardiac Surgeon"],
+        "Neurology":        ["Neurosurgeon", "Neurology Consultant", "Senior Neurologist"],
+        "Orthopedics":      ["Orthopedic Surgeon", "Joint Specialist", "Senior Orthopedician"],
+        "Billing":          ["Billing Manager", "Financial Counselor", "Accounts Supervisor"],
+        "Pharmacy":         ["Chief Pharmacist", "Clinical Pharmacist", "Pharmacy Supervisor"],
+        "General Medicine": ["Internal Medicine Specialist", "Senior General Physician"],
+        "Radiology":        ["Senior Radiologist", "Interventional Radiologist"],
+        "ICU":              ["Intensivist", "ICU Specialist", "Critical Care Consultant"],
+        "Administration":   ["Operations Manager", "Patient Experience Head"]
+    }
+
     for dept_name in departments:
         cursor.execute("INSERT INTO departments (name) VALUES (?)", (dept_name,))
-        
-        first_names = ["Arjun", "Rajesh", "Priya", "Vikram", "Anjali", "Suresh", "Meena", "Vijay", "Anita", "Sunil", "Kavita", "Rohan", "Sonal", "Deepak", "Pooja", "Amit", "Rahul", "Neha", "Manish", "Swati"]
-        last_names = ["Menon", "Kumar", "Sharma", "Singh", "Patel", "Reddy", "Iyer", "Nair", "Gupta", "Verma", "Joshi", "Das", "Bose", "Misra", "Malhotra"]
-
-        designations = {
-            "Emergency": ["ER Specialist", "Trauma Surgeon", "Chief ER Physician"],
-            "Cardiology": ["Senior Cardiologist", "Interventional Cardiologist", "Cardiac Surgeon"],
-            "Neurology": ["Neurosurgeon", "Neurology Consultant", "Senior Neurologist"],
-            "Orthopedics": ["Orthopedic Surgeon", "Joint Specialist", "Senior Orthopedician"],
-            "Billing": ["Billing Manager", "Financial Counselor", "Accounts Supervisor"],
-            "Pharmacy": ["Chief Pharmacist", "Clinical Pharmacist", "Pharmacy Supervisor"],
-            "General Medicine": ["Internal Medicine Specialist", "Senior General Physician"],
-            "Radiology": ["Senior Radiologist", "Interventional Radiologist"],
-            "ICU": ["Intensivist", "ICU Specialist", "Critical Care Consultant"],
-            "Administration": ["Operations Manager", "Patient Experience Head"]
-        }
-
-        for i in range(5): # 5 staff per dept
+        for i in range(5):
             fname = random.choice(first_names)
             lname = random.choice(last_names)
-            name = f"Dr. {fname} {lname}"
+            name  = f"Dr. {fname} {lname}"
             email = f"{fname.lower()}.{lname.lower()}{random.randint(1,99)}@aurevia.com"
-            password = "password123"
             designation = random.choice(designations[dept_name])
             avg_res = random.randint(20, 180)
-            rating = round(random.uniform(3.5, 5.0), 1)
-            
+            rating  = round(random.uniform(3.5, 5.0), 1)
             cursor.execute("""
                 INSERT INTO users (name, email, password, role, department, designation, active_tasks, avg_resolution_time, performance_rating)
                 VALUES (?, ?, ?, 'staff', ?, ?, 0, ?, ?)
-            """, (name, email, password, dept_name, designation, avg_res, rating))
+            """, (name, email, "password123", dept_name, designation, avg_res, rating))
 
-    # 4. Seed Sample Tickets
-    print("Seeding sample tickets...")
+    # 5. Seed Sample Appointments
+    print("Seeding sample appointments...")
+    sample_appointments = [
+        # (name, email, dept, date, slot, status)
+        ("Ravi Shankar",  "ravi.shankar@example.com",  "Cardiology",  "2026-02-20", "09:00 AM", "Completed"),
+        ("Priya Mehta",   "priya.mehta@example.com",   "Neurology",   "2026-02-21", "10:30 AM", "In Progress"),
+        ("Amol Patil",    "amol.patil@example.com",    "Orthopedics", "2026-02-21", "02:00 PM", "Scheduled"),
+        ("Sunita Rao",    "sunita.rao@example.com",    "Emergency",   "2026-02-22", "08:00 AM", "Scheduled"),
+        ("Vikram Bhatia", "vikram.bhatia@example.com", "Radiology",   "2026-02-22", "11:00 AM", "Scheduled"),
+    ]
+    completed_now = datetime.utcnow().isoformat()
+    for pname, pemail, dept_name, appt_date, slot, status in sample_appointments:
+        cursor.execute("SELECT id FROM departments WHERE name = ?", (dept_name,))
+        row = cursor.fetchone()
+        if not row:
+            continue
+        dept_id = row[0]
+        cursor.execute("SELECT id FROM users WHERE department = ? AND role = 'staff' LIMIT 1", (dept_name,))
+        doc_row = cursor.fetchone()
+        doc_id = doc_row[0] if doc_row else None
+        comp_at = completed_now if status == 'Completed' else None
+        cursor.execute("""
+            INSERT INTO appointments (patient_name, patient_email, department_id, doctor_id, appointment_date, time_slot, status, completed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (pname, pemail, dept_id, doc_id, appt_date, slot, status, comp_at))
+
+    # 6. Seed Sample Feedback (including one verified)
+    print("Seeding sample feedback & tickets...")
     sample_feedbacks = [
-        ("P-1001", "The waiting time in the emergency room was unacceptable. Over 4 hours!", "Negative", -0.8, 1, "Waiting Time", "High", "Emergency"),
-        ("P-1002", "Dr. Sharma was very helpful and explained everything clearly.", "Positive", 0.9, 5, "Clinical Quality", "Normal", "Cardiology"),
-        ("P-1003", "The billing department made a mistake in my insurance claim.", "Negative", -0.5, 2, "Billing", "Medium", "Billing"),
-        ("P-1004", "EQUIPMENT FAILURE: The MRI machine broke down during my scan. Very scary.", "Negative", -0.9, 1, "Facility", "Critical", "Radiology")
+        ("P-1001", "",                         "The waiting time in the emergency room was unacceptable. Over 4 hours!", "Negative", -0.8, 1, "Waiting Time", "High",     "Emergency"),
+        ("P-1002", "",                         "Dr. Sharma was very helpful and explained everything clearly.",           "Positive",  0.9, 5, "Clinical Quality", "Normal", "Cardiology"),
+        ("P-1003", "",                         "The billing department made a mistake in my insurance claim.",            "Negative", -0.5, 2, "Billing",           "Medium",  "Billing"),
+        ("P-1004", "",                         "EQUIPMENT FAILURE: The MRI machine broke down during my scan.",          "Negative", -0.9, 1, "Facility",          "Critical","Radiology"),
+        ("P-1005", "ravi.shankar@example.com", "The cardiologist was rude and did not explain my test results at all.",  "Negative", -0.7, 2, "Staff Behavior",    "High",    "Cardiology"),
     ]
 
-    for pid, text, sent, score, rat, itype, sev, dept_name in sample_feedbacks:
+    appointment_id_map = {}
+    cursor.execute("SELECT id, patient_email FROM appointments")
+    for aid, aemail in cursor.fetchall():
+        appointment_id_map[aemail.lower()] = aid
+
+    for pid, pemail, text, sent, score, rat, itype, sev, dept_name in sample_feedbacks:
+        is_verified = 0
+        appt_id = None
+        if pemail and pemail.lower() in appointment_id_map:
+            # Only Completed appointments produce verified feedback
+            cursor.execute("SELECT status FROM appointments WHERE id = ?", (appointment_id_map[pemail.lower()],))
+            appt_status_row = cursor.fetchone()
+            if appt_status_row and appt_status_row[0] == 'Completed':
+                is_verified = 1
+                appt_id = appointment_id_map[pemail.lower()]
+
         cursor.execute("""
-            INSERT INTO feedback (patient_id, feedback_text, sentiment, sentiment_score, rating, issue_type, severity)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (pid, text, sent, score, rat, itype, sev))
+            INSERT INTO feedback (patient_id, patient_email, feedback_text, sentiment, sentiment_score, rating, issue_type, severity, is_verified, appointment_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (pid, pemail, text, sent, score, rat, itype, sev, is_verified, appt_id))
         fid = cursor.lastrowid
-        
+
         cursor.execute("SELECT id FROM departments WHERE name = ?", (dept_name,))
         dept_id = cursor.fetchone()[0]
-        
-        # Get a staff from that dept
+
         cursor.execute("SELECT id FROM users WHERE department = ? AND role = 'staff' LIMIT 1", (dept_name,))
         assigned_user = cursor.fetchone()
         uid = assigned_user[0] if assigned_user else None
-        
+
         deadline = (datetime.utcnow() + timedelta(hours=6)).isoformat()
-        
         cursor.execute("""
             INSERT INTO tickets (feedback_id, department_id, status, severity, sla_deadline, assigned_user_id)
             VALUES (?, ?, 'In Progress', ?, ?, ?)
         """, (fid, dept_id, sev, deadline, uid))
-        
+
         if uid:
             cursor.execute("UPDATE users SET active_tasks = active_tasks + 1 WHERE id = ?", (uid,))
 
     conn.commit()
-    print("Database recreated and seeded with Users, Departments & Sample Tickets successfully.")
+    print("✅ Database recreated and seeded: Departments, Staff, Appointments & Tickets.")
     conn.close()
 
 if __name__ == "__main__":

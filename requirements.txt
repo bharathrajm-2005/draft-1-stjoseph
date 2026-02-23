@@ -13,3 +13,4 @@ pytest
 requests
 flask-cors
 flask-login
+flask-mail
