@@ -397,6 +397,158 @@ const API = '/api';
     });
 })();
 
+
+/* ================================================================
+   🚨 EMERGENCY SOS MODULE
+================================================================ */
+(function initEmergencySOS() {
+    const sosBtn = document.getElementById('floatingSosBtn');
+    const headerSosBtn = document.getElementById('headerSosBtn');
+    const heroSosBtn = document.getElementById('heroSosBtn');
+
+    const modal = document.getElementById('sosModal');
+    const closeBtn = document.getElementById('closeSosModal');
+    const form = document.getElementById('sosForm');
+    const successModal = document.getElementById('sosSuccessModal');
+    const closeSuccessBtn = document.getElementById('closeSosSuccessBtn');
+
+    const addrGroup = document.getElementById('sosAddressGroup');
+
+    // GPS status elements
+    const gpsSpinner = document.getElementById('gpsSpinner');
+    const gpsOk = document.getElementById('gpsOk');
+    const gpsFail = document.getElementById('gpsFail');
+    const gpsLabel = document.getElementById('gpsLabel');
+    const gpsSublabel = document.getElementById('gpsSublabel');
+
+    let userCoords = null;
+
+    if (!sosBtn && !headerSosBtn && !heroSosBtn) return;
+
+    // Open SOS Modal & Start GPS
+    const openSOS = () => {
+        modal.classList.add('open');
+        userCoords = null;
+        addrGroup.style.display = 'none';
+        // Reset GPS status to searching
+        gpsSpinner.style.display = 'inline';
+        gpsOk.style.display = 'none';
+        gpsFail.style.display = 'none';
+        gpsLabel.textContent = 'Detecting your location…';
+        gpsSublabel.textContent = 'Using GPS for precise dispatch';
+        document.getElementById('locationStatus').className = 'sos-gps-status searching';
+        requestGPS();
+    };
+
+    if (sosBtn) sosBtn.addEventListener('click', openSOS);
+    if (headerSosBtn) headerSosBtn.addEventListener('click', openSOS);
+    if (heroSosBtn) heroSosBtn.addEventListener('click', openSOS);
+
+    closeBtn.addEventListener('click', () => modal.classList.remove('open'));
+    closeSuccessBtn.addEventListener('click', () => successModal.classList.remove('open'));
+
+    function requestGPS() {
+        if (!navigator.geolocation) {
+            handleGPSFailure("GPS not supported by this browser");
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                userCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                // Show success state
+                gpsSpinner.style.display = 'none';
+                gpsOk.style.display = 'inline';
+                gpsFail.style.display = 'none';
+                gpsLabel.textContent = 'Location Locked ✓';
+                gpsSublabel.textContent = `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`;
+                document.getElementById('locationStatus').className = 'sos-gps-status success';
+                addrGroup.style.display = 'none';
+                document.getElementById('sosAddress').required = false;
+            },
+            (err) => handleGPSFailure(err.message),
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+    }
+
+    function handleGPSFailure(msg) {
+        console.warn("GPS Failed:", msg);
+        userCoords = null;
+        // Show failure state
+        gpsSpinner.style.display = 'none';
+        gpsOk.style.display = 'none';
+        gpsFail.style.display = 'inline';
+        gpsLabel.textContent = 'GPS Unavailable';
+        gpsSublabel.textContent = 'Please enter your location below';
+        document.getElementById('locationStatus').className = 'sos-gps-status failed';
+        // Reveal address fallback
+        addrGroup.style.display = 'block';
+        document.getElementById('sosAddress').required = true;
+    }
+
+    // FORM SUBMIT
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const name = document.getElementById('sosName').value.trim();
+        const phone = document.getElementById('sosPhone').value.trim();
+        const address = document.getElementById('sosAddress').value.trim();
+
+        document.getElementById('sosPhoneErr').textContent = '';
+        document.getElementById('sosAddressErr').textContent = '';
+
+        if (!phone) {
+            document.getElementById('sosPhoneErr').textContent = "Phone number is required";
+            return;
+        }
+
+        if (!userCoords && !address) {
+            document.getElementById('sosAddressErr').textContent = "Please enter your address so we can locate you";
+            return;
+        }
+
+        const submitBtn = document.getElementById('sosSubmitBtn');
+        const loader = document.getElementById('sosLoader');
+        const btnInner = document.getElementById('sosBtnInner');
+
+        btnInner.style.display = 'none';
+        loader.style.display = 'flex';
+        submitBtn.disabled = true;
+
+        try {
+            const res = await fetch('/api/emergency/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: name || "Anonymous Patient",
+                    phone: phone,
+                    address: address || "GPS Location Provided",
+                    latitude: userCoords ? userCoords.lat : null,
+                    longitude: userCoords ? userCoords.lng : null
+                })
+            });
+
+            const json = await res.json();
+
+            if (res.ok && json.status === 'success') {
+                modal.classList.remove('open');
+                successModal.classList.add('open');
+                form.reset();
+                userCoords = null;
+            } else {
+                alert(json.message || "Priority dispatch failed. Please call 1300-AUREVIA immediately.");
+            }
+        } catch (e) {
+            alert("Network Error. Please dial 1300-AUREVIA directly for emergency support.");
+        } finally {
+            btnInner.style.display = 'flex';
+            loader.style.display = 'none';
+            submitBtn.disabled = false;
+        }
+    });
+
+})();
+
 /* ================================================================
    SCROLL REVEAL ANIMATIONS
 ================================================================ */

@@ -17,6 +17,14 @@
 
 <body>
 
+    <!-- ====== EMERGENCY SOS BANNER ====== -->
+    <div class="emergency-top-banner" id="topSosBanner">
+        <div class="container banner-flex">
+            <span>🚨 <strong>Urgently need medical help?</strong> Our AI-Ambulance fleet is on standby.</span>
+            <button class="banner-sos-btn" id="headerSosBtn">CLICK FOR IMMEDIATE SOS</button>
+        </div>
+    </div>
+
     <!-- ====== NAVBAR ====== -->
     <nav class="navbar" id="navbar">
         <div class="navbar-container">
@@ -56,6 +64,7 @@
                 technology meets genuine human care.</p>
             <div class="hero-actions">
                 <a href="#booking" class="hero-btn hero-btn-primary">📅 Book an Appointment</a>
+                <button class="hero-btn hero-btn-sos pulse-red" id="heroSosBtn">🚨 EMERGENCY SOS</button>
                 <a href="#feedback" class="hero-btn hero-btn-secondary">💬 Share Feedback</a>
             </div>
             <div class="hero-stats">
@@ -605,6 +614,79 @@
     </footer>
 
     <!-- ====== MODALS ====== -->
+    <!-- SOS Emergency Modal -->
+    <div class="modal-backdrop" id="sosModal">
+        <div class="modal-box sos-modal">
+            <button class="modal-x" id="closeSosModal">✕</button>
+            <div class="sos-icon-lg pulse-alert">🚨</div>
+            <h2 class="sos-title">Emergency Assistance</h2>
+            <p class="sos-desc">We'll dispatch the nearest ambulance to you immediately.</p>
+
+            <form id="sosForm" class="sos-form">
+                <div class="form-group">
+                    <label class="form-label" for="sosName">Your Name <span
+                            style="color:#94a3b8;font-weight:500">(Optional)</span></label>
+                    <input type="text" id="sosName" class="form-input" placeholder="e.g. Ravi Kumar">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="sosPhone">Mobile Number <span class="req">*</span></label>
+                    <input type="tel" id="sosPhone" class="form-input" placeholder="+91 98765 43210" required>
+                    <span class="err-msg" id="sosPhoneErr"></span>
+                </div>
+
+                <!-- GPS Status Banner — shown always, address only if GPS fails -->
+                <div class="sos-gps-status" id="locationStatus">
+                    <div class="gps-icon-wrap">
+                        <span class="gps-spinner" id="gpsSpinner">⟳</span>
+                        <span class="gps-icon-ok" id="gpsOk" style="display:none">📍</span>
+                        <span class="gps-icon-fail" id="gpsFail" style="display:none">⚠️</span>
+                    </div>
+                    <div class="gps-text-wrap">
+                        <span class="gps-label" id="gpsLabel">Detecting your location…</span>
+                        <span class="gps-sublabel" id="gpsSublabel">Using GPS for precise dispatch</span>
+                    </div>
+                </div>
+
+                <!-- Only shown if GPS fails -->
+                <div class="form-group" id="sosAddressGroup" style="display:none">
+                    <label class="form-label" for="sosAddress">Your Address <span class="req">*</span></label>
+                    <textarea id="sosAddress" class="form-input" rows="3"
+                        placeholder="Street, Area, City — be as specific as possible"></textarea>
+                    <span class="err-msg" id="sosAddressErr"></span>
+                </div>
+
+                <button type="submit" class="btn-sos-dispatch" id="sosSubmitBtn">
+                    <span id="sosBtnInner">
+                        <span class="dispatch-icon">🚑</span>
+                        <span class="dispatch-text">
+                            <strong>Send Ambulance Now</strong>
+                            <small>Tap to dispatch instantly</small>
+                        </span>
+                    </span>
+                    <span id="sosLoader" style="display:none" class="sos-loading-state">
+                        Contacting dispatch centre…
+                    </span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- SOS Success Modal -->
+    <div class="modal-backdrop" id="sosSuccessModal">
+        <div class="modal-box sos-success-modal">
+            <div class="modal-icon-lg animate-success">✅</div>
+            <h2>Dispatched!</h2>
+            <p id="sosSuccessMsg">Oxygen-equipped ambulance is on its way to your location. Please stay reachable on
+                your phone.</p>
+            <button class="btn-modal-close" id="closeSosSuccessBtn">Got it</button>
+        </div>
+    </div>
+
+    <!-- Floating SOS Button -->
+    <button id="floatingSosBtn" class="floating-sos-btn">
+        <span class="sos-btn-icon">🚨</span>
+        <span class="sos-btn-text">EMERGENCY SOS</span>
+    </button>
     <!-- Booking Success Modal -->
     <div class="modal-backdrop" id="bookingModal">
         <div class="modal-box booking-success-modal">

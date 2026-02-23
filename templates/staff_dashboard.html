@@ -28,6 +28,9 @@
                     <button id="viewTasksBtn" class="nav-btn active">
                         <span>📋</span> My Active Tasks
                     </button>
+                    <button id="viewAppointmentsBtn" class="nav-btn">
+                        <span>🗓️</span> My Appointments
+                    </button>
                     <button id="viewPerfBtn" class="nav-btn">
                         <span>📊</span> My Performance
                     </button>
@@ -62,7 +65,8 @@
             </header>
 
             <div class="dashboard-content">
-                <section class="content-section">
+                <!-- SECTION: Active Tasks -->
+                <section class="content-section" id="sectionTasks">
                     <div class="section-header">
                         <h2>Assigned Recovery Cases</h2>
                         <span class="badge badge-active" id="taskCount">0 Active</span>
@@ -72,6 +76,19 @@
                         <!-- Tasks Injected here -->
                         <div class="loading-state">
                             <p>Loading your assigned cases...</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- SECTION: My Appointments -->
+                <section class="content-section" id="sectionAppointments" style="display:none">
+                    <div class="section-header">
+                        <h2>My Appointments</h2>
+                        <span class="badge badge-active" id="apptCount">0 Total</span>
+                    </div>
+                    <div id="apptGrid" class="appt-grid">
+                        <div class="loading-state">
+                            <p>Loading appointments...</p>
                         </div>
                     </div>
                 </section>
@@ -123,6 +140,54 @@
             <button id="completeTaskBtn" class="btn btn-success full-width">MARK AS RESOLVED</button>
         </div>
     </aside>
+
+    <!-- 🚨 EMERGENCY DISPATCH OVERLAY -->
+    <div id="emergencyAlertOverlay" class="emergency-overlay hidden">
+        <div class="emergency-modal">
+            <div class="emergency-header">
+                <div class="sos-glow"></div>
+                <span class="sos-icon">🚨</span>
+                <h2>EMERGENCY DISPATCH</h2>
+                <p>AI-Automated Priority Mission</p>
+            </div>
+            <div class="emergency-body">
+                <div class="patient-detail-box">
+                    <span class="detail-label">PATIENT / CONTACT</span>
+                    <h3 id="alertPatientName">-</h3>
+                    <p id="alertPhone" style="font-weight: 700; color: #ef4444; margin: 0; font-size: 1.1em;"></p>
+                </div>
+                <div class="location-detail-box">
+                    <span class="detail-label">LOCATION/INCIDENT</span>
+                    <p id="alertLocation">-</p>
+                    <div id="alertMapLinkContainer" class="hidden">
+                        <a id="alertMapLink" href="#" target="_blank" class="btn-geo-link">📍 View on Maps</a>
+                    </div>
+                </div>
+                <div class="emergency-meta">
+                    <span class="badge" id="alertSeverity">URGENT</span>
+                    <span id="alertTime" class="alert-time-badge">--:--</span>
+                </div>
+            </div>
+            <div class="emergency-actions">
+                <button id="acceptTripBtn" class="btn btn-emergency">ACCEPT MISSION</button>
+                <button id="completeTripBtn" class="btn btn-success hidden">MARK AS COMPLETED</button>
+            </div>
+        </div>
+        <audio id="emergencyAlarm" loop>
+            <source src="https://cdn.pixabay.com/audio/2022/03/10/audio_c89b8893d6.mp3" type="audio/mpeg">
+        </audio>
+    </div>
+
+    <!-- 🚨 MINIMIZED SOS WIDGET (For active trips) -->
+    <div id="minimizedSosWidget" class="minimized-sos-widget hidden">
+        <div class="mini-sos-content">
+            <div class="mini-sos-info">
+                <span class="mini-sos-badge">📍 IN TRANSIT</span>
+                <span id="miniPatientName">Patient...</span>
+            </div>
+            <button id="miniCompleteBtn" class="btn-mini-complete">🏁 COMPLETE TRIP</button>
+        </div>
+    </div>
 
     <div id="toastContainer"></div>
 

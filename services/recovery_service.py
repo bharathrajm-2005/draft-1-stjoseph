@@ -8,6 +8,7 @@ from models.severity_engine import SeverityEngine
 from .rule_engine import RuleEngine
 from .notification_service import NotificationService
 from .ai_response_service import AIResponseService
+from .triage_service import TriageService
 from utils.helpers import calculate_deadline
 from utils.logger import app_logger
 
@@ -20,6 +21,7 @@ class RecoveryService:
         self.rule_engine = RuleEngine()
         self.notifier = NotificationService()
         self.ai_responder = AIResponseService()
+        self.triage_service = TriageService()
 
     def process_new_feedback(self, patient_id, feedback_text, rating=None):
         try:
@@ -68,7 +70,26 @@ class RecoveryService:
             raise e
 
     def trigger_recovery_workflow(self, feedback):
-        dept_name, sla_mins = self.rule_engine.determine_sla_and_dept(feedback.issue_type, feedback.severity)
+        dept_name, _ = self.rule_engine.determine_sla_and_dept(feedback.issue_type, feedback.severity)
+        
+        # Calculate Dynamic SLA
+        is_verified = getattr(feedback, 'is_verified', False)
+        # Note: at this point is_verified might be False because it's set in controllers after process_new_feedback
+        # But we can check if there's an appointment link if we re-query later or pass it in.
+        # For now, use a base based on severity.
+        
+        severity_map = {
+            "Critical": "Emergency",
+            "High": "Urgent",
+            "Medium": "Normal", # We'll treat Medium as Normal baseline
+            "Low": "Normal"
+        }
+        
+        sla_mins = self.triage_service.calculate_dynamic_sla(
+            severity_map.get(feedback.severity, "Normal"),
+            is_verified=is_verified
+        )
+        
         deadline = calculate_deadline(sla_mins / 60)
         
         # Find department 

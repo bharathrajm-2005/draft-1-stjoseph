@@ -10,6 +10,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentTaskId = null;
     let slaInterval = null;
     let pollingInterval = null;
+    let emergencyInterval = null;
+    let activeAlertId = null;
 
     // Elements
     const elements = {
@@ -38,14 +40,59 @@ document.addEventListener('DOMContentLoaded', () => {
         loadTasks();
         setupEventListeners();
 
-        // Polling
+        // Polling for tasks & profile
         pollingInterval = setInterval(() => {
+            if (activeSection === 'tasks') loadTasks();
             loadProfile();
-            loadTasks();
-        }, 5000); // 5 second polling as requested
+        }, 5000);
+
+        // Appointment polling (30s, lighter)
+        apptPollInterval = setInterval(() => {
+            if (activeSection === 'appointments') loadDoctorAppointments();
+        }, 30000);
+
+        // Emergency Dispatch Polling (Part 1B)
+        emergencyInterval = setInterval(pollEmergencyDispatches, 3000);
+        pollEmergencyDispatches();
 
         // SLA Updates
         slaInterval = setInterval(updateSLATimers, 1000);
+
+        // Start on tasks section
+        showSection('tasks');
+    }
+
+    // ---- active section tracking ----
+    let activeSection = 'tasks'; // 'tasks' | 'appointments' | 'perf'
+    let apptPollInterval = null;
+
+    function showSection(section) {
+        activeSection = section;
+        const sectionTasks = document.getElementById('sectionTasks');
+        const sectionAppts = document.getElementById('sectionAppointments');
+        const btnTasks = document.getElementById('viewTasksBtn');
+        const btnAppts = document.getElementById('viewAppointmentsBtn');
+        const btnPerf = document.getElementById('viewPerfBtn');
+
+        // Hide all
+        if (sectionTasks) sectionTasks.style.display = 'none';
+        if (sectionAppts) sectionAppts.style.display = 'none';
+
+        // Remove active from all nav btns
+        [btnTasks, btnAppts, btnPerf].forEach(b => b && b.classList.remove('active'));
+
+        if (section === 'tasks') {
+            if (sectionTasks) sectionTasks.style.display = '';
+            if (btnTasks) btnTasks.classList.add('active');
+        } else if (section === 'appointments') {
+            if (sectionAppts) sectionAppts.style.display = '';
+            if (btnAppts) btnAppts.classList.add('active');
+            loadDoctorAppointments();
+        } else {
+            if (sectionTasks) sectionTasks.style.display = ''; // fallback
+            if (btnPerf) btnPerf.classList.add('active');
+            showToast('Performance metrics coming soon!', 'info');
+        }
     }
 
     function setupEventListeners() {
@@ -53,16 +100,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (elements.overlay) elements.overlay.addEventListener('click', closeTaskPanel);
         if (elements.completeBtn) elements.completeBtn.addEventListener('click', handleCompleteTask);
 
-        // Sidebar navigation (just refreshing for now)
+        // Sidebar navigation with section switching
         const vTasks = document.getElementById('viewTasksBtn');
+        const vAppts = document.getElementById('viewAppointmentsBtn');
         const vPerf = document.getElementById('viewPerfBtn');
-        if (vTasks) vTasks.addEventListener('click', () => {
-            loadTasks();
-            showToast('Task list refreshed');
-        });
-        if (vPerf) vPerf.addEventListener('click', () => {
-            showToast('Performance metrics coming soon!', 'info');
-        });
+        if (vTasks) vTasks.addEventListener('click', () => showSection('tasks'));
+        if (vAppts) vAppts.addEventListener('click', () => showSection('appointments'));
+        if (vPerf) vPerf.addEventListener('click', () => showSection('perf'));
+
+        // Driver Emergency Actions
+        const acceptBtn = document.getElementById('acceptTripBtn');
+        const completeBtn = document.getElementById('completeTripBtn');
+        const miniCompleteBtn = document.getElementById('miniCompleteBtn');
+
+        if (acceptBtn) acceptBtn.onclick = () => handleTripAction('accept');
+        if (completeBtn) completeBtn.onclick = () => handleTripAction('complete');
+        if (miniCompleteBtn) miniCompleteBtn.onclick = () => handleTripAction('complete');
     }
 
     // --- DATA FETCHING ---
@@ -219,6 +272,135 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- 🚨 EMERGENCY DRIVER WORKFLOW ---
+    async function pollEmergencyDispatches() {
+        try {
+            const res = await fetch('/api/driver/emergency-status');
+            if (!res.ok) return;
+            const json = await res.json();
+
+            if (json.status === 'success' && json.data) {
+                const alert = json.data;
+                activeAlertId = alert.id;
+                updateEmergencyOverlay(alert);
+            } else {
+                // No active mission for this driver
+                if (activeAlertId) closeEmergencyOverlay();
+                activeAlertId = null;
+            }
+        } catch (e) {
+            console.error('SOS Poll Error', e);
+        }
+    }
+
+    function updateEmergencyOverlay(alert) {
+        const overlay = document.getElementById('emergencyAlertOverlay');
+        const miniWidget = document.getElementById('minimizedSosWidget');
+        const audio = document.getElementById('emergencyAlarm');
+
+        document.getElementById('alertPatientName').textContent = alert.patient_name;
+        document.getElementById('alertPhone').textContent = `☎️ ${alert.phone}`;
+        document.getElementById('alertLocation').textContent = alert.address;
+        document.getElementById('miniPatientName').textContent = alert.patient_name;
+
+        // Maps Link
+        const mapContainer = document.getElementById('alertMapLinkContainer');
+        const mapLink = document.getElementById('alertMapLink');
+        if (alert.maps_link) {
+            mapLink.href = alert.maps_link;
+            mapContainer.classList.remove('hidden');
+        } else {
+            mapContainer.classList.add('hidden');
+        }
+
+        const sevBadge = document.getElementById('alertSeverity');
+        if (sevBadge) sevBadge.textContent = alert.status.toUpperCase();
+
+        const timeBadge = document.getElementById('alertTime');
+        if (timeBadge && alert.created_at) {
+            timeBadge.textContent = `Reported: ${formatTimeStack(alert.created_at)}`;
+        }
+
+        const acceptBtn = document.getElementById('acceptTripBtn');
+        const completeBtn = document.getElementById('completeTripBtn');
+
+        if (alert.status === 'Dispatched') {
+            overlay.classList.add('active'); // Use active class as per CSS
+            overlay.classList.remove('hidden');
+            miniWidget.classList.add('hidden');
+            if (acceptBtn) acceptBtn.classList.remove('hidden');
+            if (completeBtn) completeBtn.classList.add('hidden');
+            if (audio && audio.paused) audio.play().catch(e => console.log('Audio blocked', e));
+        } else if (alert.status === 'In Transit') {
+            overlay.classList.add('hidden');
+            overlay.classList.remove('active');
+            miniWidget.classList.remove('hidden');
+            miniWidget.classList.add('active');
+            if (audio) audio.pause();
+        }
+    }
+
+    async function handleTripAction(action) {
+        if (!activeAlertId) return;
+
+        const btn = action === 'accept' ? document.getElementById('acceptTripBtn') : document.getElementById('completeTripBtn');
+        const miniBtn = document.getElementById('miniCompleteBtn');
+
+        const origText = btn ? btn.textContent : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = action === 'accept' ? 'ACCEPTING...' : 'COMPLETING...';
+        }
+        if (miniBtn) miniBtn.disabled = true;
+
+        // FIXED: Use the correct emergency ID routes
+        const endpoint = `/api/driver/emergency/${action}/${activeAlertId}`;
+
+        try {
+            const res = await fetch(endpoint, { method: 'POST' });
+            const json = await res.json();
+
+            if (json.status === 'success') {
+                showToast(`✅ Mission ${action === 'accept' ? 'Accepted' : 'Completed'}!`, 'success');
+                if (action === 'complete') {
+                    closeEmergencyOverlay();
+                    activeAlertId = null;
+                }
+                pollEmergencyDispatches();
+            } else {
+                showToast(json.message || "Action failed", 'error');
+            }
+        } catch (e) {
+            showToast("Network error during mission update", 'error');
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = origText;
+            }
+            if (miniBtn) miniBtn.disabled = false;
+        }
+    }
+
+    function closeEmergencyOverlay() {
+        const overlay = document.getElementById('emergencyAlertOverlay');
+        const miniWidget = document.getElementById('minimizedSosWidget');
+        const audio = document.getElementById('emergencyAlarm');
+
+        if (overlay) {
+            overlay.classList.add('hidden');
+            overlay.classList.remove('active');
+        }
+        if (miniWidget) {
+            miniWidget.classList.add('hidden');
+            miniWidget.classList.remove('active');
+        }
+        if (audio) {
+            audio.pause();
+            audio.currentTime = 0;
+        }
+        activeAlertId = null;
+    }
+
     // --- UTILS ---
     function updateSLATimers() {
         document.querySelectorAll('.task-sla-timer').forEach(timer => {
@@ -250,11 +432,27 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     }
 
+
+    function formatTimeStack(isoString) {
+        if (!isoString) return '--';
+        const date = new Date(isoString);
+        const now = new Date();
+        const diffInSeconds = Math.floor((now - date) / 1000);
+
+        if (diffInSeconds < 60) return 'Just now';
+        const mins = Math.floor(diffInSeconds / 60);
+        if (mins < 60) return `${mins}m ago`;
+        const hours = Math.floor(mins / 60);
+        return `${hours}h ago`;
+    }
+
     function showToast(message, type = 'success') {
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
         toast.textContent = message;
-        document.getElementById('toastContainer').appendChild(toast);
+        // The HTML has toastContainer, checking both for safety
+        const container = document.getElementById('toastContainer') || document.getElementById('toastWrapper');
+        if (container) container.appendChild(toast);
         setTimeout(() => toast.classList.add('show'), 100);
         setTimeout(() => {
             toast.classList.remove('show');
@@ -262,5 +460,94 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 4000);
     }
 
+
+    //  DOCTOR APPOINTMENTS MODULE 
+
+    let myAppointments = [];
+
+    async function loadDoctorAppointments() {
+        const grid = document.getElementById('apptGrid');
+        try {
+            const res = await fetch('/api/doctor/appointments');
+            const json = await res.json();
+            if (json.status !== 'success') throw new Error(json.message);
+            myAppointments = json.data;
+            renderAppointments();
+        } catch (e) {
+            console.error('Appointment load error', e);
+            if (grid) grid.innerHTML = '<div class="empty-state"><p>Could not load appointments.</p></div>';
+        }
+    }
+
+    function renderAppointments() {
+        const grid    = document.getElementById('apptGrid');
+        const countEl = document.getElementById('apptCount');
+        if (!grid) return;
+        if (countEl) countEl.textContent = myAppointments.length + ' Total';
+
+        if (myAppointments.length === 0) {
+            grid.innerHTML = '<div class="empty-state appt-empty"><div class="empty-icon"></div><h3>No Appointments Yet</h3><p>Your scheduled appointments will appear here once assigned.</p></div>';
+            return;
+        }
+
+        const statusColor = {
+            'Scheduled':   { bg: '#eff6ff', text: '#1d4ed8', dot: '#3b82f6' },
+            'In Progress': { bg: '#fef9c3', text: '#854d0e', dot: '#f59e0b' },
+            'Completed':   { bg: '#f0fdf4', text: '#15803d', dot: '#22c55e' }
+        };
+
+        grid.innerHTML = myAppointments.map(function(a) {
+            const sc = statusColor[a.status] || { bg: '#f1f5f9', text: '#475569', dot: '#94a3b8' };
+            const isCompleted = a.status === 'Completed';
+            const typeIcon = a.type === 'Emergency' ? '' : (a.type === 'Urgent' ? '' : '');
+            const dotSpan = '<span style="width:7px;height:7px;border-radius:50%;background:' + sc.dot + ';display:inline-block;margin-right:4px;vertical-align:middle"></span>';
+            const verifiedNote = isCompleted ? '<div class="appt-verified-note"> Completed  Patient eligible for Verified feedback</div>' : '';
+            const footerBtn = !isCompleted ? '<div class="appt-card-footer"><button class="btn-complete-appt" onclick="window.completeAppointment(' + a.id + ', this)"> Mark as Completed</button></div>' : '';
+
+            return '<div class="appt-card" data-id="' + a.id + '">' +
+                '<div class="appt-card-header">' +
+                  '<div class="appt-id-row">' +
+                    '<span class="appt-type-icon">' + typeIcon + '</span>' +
+                    '<span class="appt-id-label">#APPT-' + String(a.id).padStart(4,'0') + '</span>' +
+                  '</div>' +
+                  '<span class="appt-status-badge" style="background:' + sc.bg + ';color:' + sc.text + '">' + dotSpan + a.status + '</span>' +
+                '</div>' +
+                '<div class="appt-card-body">' +
+                  '<div class="appt-row"><span class="appt-lbl">Patient</span><span class="appt-val">' + a.patient_name + '</span></div>' +
+                  '<div class="appt-row"><span class="appt-lbl">Email</span><span class="appt-val appt-email">' + a.patient_email + '</span></div>' +
+                  '<div class="appt-row"><span class="appt-lbl">Date &amp; Time</span><span class="appt-val">' + a.appointment_date + '  ' + a.time_slot + '</span></div>' +
+                  '<div class="appt-row"><span class="appt-lbl">Department</span><span class="appt-val">' + a.department + '</span></div>' +
+                  verifiedNote +
+                '</div>' +
+                footerBtn +
+            '</div>';
+        }).join('');
+    }
+
+    // Exposed globally so inline onclick inside innerHTML works
+    window.completeAppointment = async function(apptId, btn) {
+        if (!apptId) return;
+        var originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Completing\u2026';
+
+        try {
+            var res  = await fetch('/api/doctor/appointments/' + apptId + '/complete', { method: 'POST' });
+            var json = await res.json();
+            if (json.status === 'success') {
+                showToast('\u2705 Appointment completed! Patient can now submit verified feedback.', 'success');
+                loadDoctorAppointments();
+                loadProfile();
+            } else {
+                showToast(json.message || 'Could not complete appointment.', 'error');
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        } catch (e) {
+            showToast('Network error. Please try again.', 'error');
+            btn.disabled = false;
+            btn.textContent = originalText;
+        }
+    };
     init();
 });

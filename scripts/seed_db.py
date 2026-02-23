@@ -17,7 +17,10 @@ def seed_database():
     cursor = conn.cursor()
 
     # 1. Clean up existing tables (in dependency order)
-    tables = ['ai_response_logs', 'escalation_logs', 'tickets', 'feedback', 'appointments', 'users', 'departments']
+    tables = [
+        'ai_response_logs', 'escalation_logs', 'tickets', 'feedback', 
+        'appointments', 'users', 'departments', 'ambulances', 'emergency_dispatches', 'emergency_requests'
+    ]
     for table in tables:
         cursor.execute(f"DROP TABLE IF EXISTS {table}")
 
@@ -47,15 +50,67 @@ def seed_database():
         id INTEGER PRIMARY KEY,
         patient_name VARCHAR(100) NOT NULL,
         patient_email VARCHAR(100) NOT NULL,
+        patient_phone VARCHAR(20),
         department_id INTEGER NOT NULL,
         doctor_id INTEGER,
         appointment_date VARCHAR(20) NOT NULL,
         time_slot VARCHAR(20) NOT NULL,
         status VARCHAR(20) DEFAULT 'Scheduled',
+        appointment_type VARCHAR(20) DEFAULT 'Normal',
+        ambulance_id INTEGER,
         completed_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(department_id) REFERENCES departments(id),
-        FOREIGN KEY(doctor_id) REFERENCES users(id)
+        FOREIGN KEY(doctor_id) REFERENCES users(id),
+        FOREIGN KEY(ambulance_id) REFERENCES ambulances(id)
+    )""")
+
+    cursor.execute("""
+    CREATE TABLE ambulances (
+        id INTEGER PRIMARY KEY,
+        driver_id INTEGER,
+        vehicle_number VARCHAR(20) UNIQUE NOT NULL,
+        driver_name VARCHAR(100) NOT NULL,
+        status VARCHAR(20) DEFAULT 'Available',
+        current_lat FLOAT,
+        current_lng FLOAT,
+        target_lat FLOAT,
+        target_lng FLOAT,
+        last_update DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(driver_id) REFERENCES users(id)
+    )""")
+
+    cursor.execute("""
+    CREATE TABLE emergency_dispatches (
+        id INTEGER PRIMARY KEY,
+        appointment_id INTEGER NOT NULL,
+        dispatch_status VARCHAR(20) DEFAULT 'Pending',
+        primary_driver_id INTEGER,
+        secondary_driver_id INTEGER,
+        assigned_driver_id INTEGER,
+        first_alert_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+        second_alert_time DATETIME,
+        accepted_at DATETIME,
+        FOREIGN KEY(appointment_id) REFERENCES appointments(id),
+        FOREIGN KEY(primary_driver_id) REFERENCES users(id),
+        FOREIGN KEY(secondary_driver_id) REFERENCES users(id),
+        FOREIGN KEY(assigned_driver_id) REFERENCES users(id)
+    )""")
+
+    cursor.execute("""
+    CREATE TABLE emergency_requests (
+        id INTEGER PRIMARY KEY,
+        patient_name TEXT NOT NULL,
+        phone_number TEXT NOT NULL,
+        address TEXT,
+        latitude FLOAT,
+        longitude FLOAT,
+        status TEXT DEFAULT 'Pending',
+        assigned_driver_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        accepted_at DATETIME,
+        completed_at DATETIME,
+        FOREIGN KEY(assigned_driver_id) REFERENCES users(id)
     )""")
 
     cursor.execute("""
@@ -118,12 +173,38 @@ def seed_database():
     )""")
 
     # 3. Seed Admin
+    print("Seeding Admin...")
     cursor.execute("""
         INSERT INTO users (name, email, password, role, designation)
         VALUES ('Aurevia Admin', 'admin@aurevia.com', 'admin123', 'admin', 'Chief Operations Officer')
     """)
 
-    # 4. Seed Departments & Staff
+    # 4. Seed Drivers & Ambulances
+    print("Seeding drivers and ambulances...")
+    drivers_data = [
+        ("Karan Sharma", "karan@aurevia.com", "AMB-001", 12.9716, 77.5946),
+        ("Sumeet Vyas",  "sumeet@aurevia.com", "AMB-002", 12.9345, 77.6101),
+        ("Rahul Bose",   "rahul@aurevia.com", "AMB-003", 12.9562, 77.7019),
+        ("Vikas Khanna", "vikas@aurevia.com", "AMB-004", 13.0358, 77.5970),
+        ("Aditya Roy",   "aditya@aurevia.com", "AMB-005", 12.9141, 77.6413)
+    ]
+    
+    for name, email, v_num, lat, lng in drivers_data:
+        # Create user
+        cursor.execute("""
+            INSERT INTO users (name, email, password, role, designation)
+            VALUES (?, ?, 'driver123', 'staff', 'Ambulance Driver')
+        """, (name, email))
+        driver_id = cursor.lastrowid
+        
+        # Create ambulance linked to user
+        cursor.execute("""
+            INSERT INTO ambulances (driver_id, vehicle_number, driver_name, current_lat, current_lng, status)
+            VALUES (?, ?, ?, ?, ?, 'Available')
+        """, (driver_id, v_num, name, lat, lng))
+
+    # 5. Seed Departments & Staff
+    print("Seeding departments and staff...")
     departments = [
         "Emergency", "Cardiology", "Neurology", "Orthopedics", "Billing",
         "Pharmacy", "General Medicine", "Radiology", "ICU", "Administration"
@@ -163,15 +244,15 @@ def seed_database():
     # 5. Seed Sample Appointments
     print("Seeding sample appointments...")
     sample_appointments = [
-        # (name, email, dept, date, slot, status)
-        ("Ravi Shankar",  "ravi.shankar@example.com",  "Cardiology",  "2026-02-20", "09:00 AM", "Completed"),
-        ("Priya Mehta",   "priya.mehta@example.com",   "Neurology",   "2026-02-21", "10:30 AM", "In Progress"),
-        ("Amol Patil",    "amol.patil@example.com",    "Orthopedics", "2026-02-21", "02:00 PM", "Scheduled"),
-        ("Sunita Rao",    "sunita.rao@example.com",    "Emergency",   "2026-02-22", "08:00 AM", "Scheduled"),
-        ("Vikram Bhatia", "vikram.bhatia@example.com", "Radiology",   "2026-02-22", "11:00 AM", "Scheduled"),
+        # (name, email, dept, date, slot, status, type)
+        ("Ravi Shankar",  "ravi.shankar@example.com",  "Cardiology",  "2026-02-20", "09:00 AM", "Completed",   "Normal"),
+        ("Priya Mehta",   "priya.mehta@example.com",   "Neurology",   "2026-02-21", "10:30 AM", "In Progress", "Urgent"),
+        ("Amol Patil",    "amol.patil@example.com",    "Orthopedics", "2026-02-21", "02:00 PM", "Scheduled",   "Normal"),
+        ("Sunita Rao",    "sunita.rao@example.com",    "Emergency",   "2026-02-22", "08:00 AM", "Scheduled",   "Emergency"),
+        ("Vikram Bhatia", "vikram.bhatia@example.com", "Radiology",   "2026-02-22", "11:00 AM", "Scheduled",   "Normal"),
     ]
     completed_now = datetime.utcnow().isoformat()
-    for pname, pemail, dept_name, appt_date, slot, status in sample_appointments:
+    for pname, pemail, dept_name, appt_date, slot, status, appt_type in sample_appointments:
         cursor.execute("SELECT id FROM departments WHERE name = ?", (dept_name,))
         row = cursor.fetchone()
         if not row:
@@ -182,9 +263,9 @@ def seed_database():
         doc_id = doc_row[0] if doc_row else None
         comp_at = completed_now if status == 'Completed' else None
         cursor.execute("""
-            INSERT INTO appointments (patient_name, patient_email, department_id, doctor_id, appointment_date, time_slot, status, completed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (pname, pemail, dept_id, doc_id, appt_date, slot, status, comp_at))
+            INSERT INTO appointments (patient_name, patient_email, department_id, doctor_id, appointment_date, time_slot, status, completed_at, appointment_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (pname, pemail, dept_id, doc_id, appt_date, slot, status, comp_at, appt_type))
 
     # 6. Seed Sample Feedback (including one verified)
     print("Seeding sample feedback & tickets...")

@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const API_BASE_URL = '/api';
     const REFRESH_INTERVAL = 10000; // 10 seconds — catches staff resolutions quickly
     let activeTickets = [];
+    let emergencyRequests = []; // Cached for driver-assignment cross-ref
     let currentTicketId = null;
     let refreshTimer = null;
     let slaTimerInterval = null;
@@ -26,22 +27,24 @@ document.addEventListener('DOMContentLoaded', () => {
             rating: document.getElementById('metricRating'),
             critical: document.getElementById('metricCritical'),
             wait: document.getElementById('metricWait'),
+            appts: document.getElementById('metricAppts'),
+            verified: document.getElementById('metricVerified'),
         },
         sidebar: {
             deptFilter: document.getElementById('filterDept'),
             sentimentFilter: document.getElementById('filterSentiment'),
             statusFilter: document.getElementById('filterStatus'),
             viewAnalytics: document.getElementById('showAnalyticsBtn'),
-            viewHeatmap: document.getElementById('showHeatmapBtn'),
             viewAppointments: document.getElementById('showAppointmentsBtn'),
+            viewEmergency: document.getElementById('showEmergencyBtn'),
             refreshBtn: document.getElementById('refreshBtn'),
             lastUpdate: document.getElementById('lastUpdate')
         },
         views: {
             ticketView: document.querySelector('.ticket-view'),
             analyticsView: document.getElementById('analyticsSection'),
-            heatmapView: document.getElementById('heatmapSection'),
-            appointmentsView: document.getElementById('appointmentsSection')
+            appointmentsView: document.getElementById('appointmentsSection'),
+            emergencyView: document.getElementById('emergencySection')
         },
         detailPanel: {
             panel: document.getElementById('detailPanel'),
@@ -90,17 +93,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         elements.sidebar.viewAnalytics.addEventListener('click', () => switchView('analytics'));
-        elements.sidebar.viewHeatmap.addEventListener('click', () => switchView('heatmap'));
         if (elements.sidebar.viewAppointments)
             elements.sidebar.viewAppointments.addEventListener('click', () => switchView('appointments'));
+
+        if (elements.sidebar.viewEmergency)
+            elements.sidebar.viewEmergency.addEventListener('click', () => switchView('emergency'));
+
         elements.sidebar.refreshBtn.addEventListener('click', loadDashboardState);
 
         const closeAnalytics = document.getElementById('closeAnalytics');
-        const closeHeatmap = document.getElementById('closeHeatmap');
         const closeAppointments = document.getElementById('closeAppointments');
+        const closeEmergency = document.getElementById('closeEmergency');
+
         if (closeAnalytics) closeAnalytics.addEventListener('click', () => switchView('tickets'));
-        if (closeHeatmap) closeHeatmap.addEventListener('click', () => switchView('tickets'));
         if (closeAppointments) closeAppointments.addEventListener('click', () => switchView('tickets'));
+        if (closeEmergency) closeEmergency.addEventListener('click', () => switchView('tickets'));
 
         elements.detailPanel.close.addEventListener('click', closeDetailPanel);
         elements.detailPanel.overlay.addEventListener('click', closeDetailPanel);
@@ -111,22 +118,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- DATA LOADING ---
     async function loadDashboardState() {
-        await Promise.all([loadMetrics(), loadTickets()]);
+        await Promise.all([
+            loadMetrics(),
+            loadTickets(),
+            loadSOSMonitor(),
+            loadAmbulanceFleet()
+        ]);
         updateLastSyncTime();
     }
 
     async function loadMetrics() {
         try {
-            const res = await fetch(`${API_BASE_URL}/stats/dashboard`);
-            const json = await res.json();
-            if (json.status === 'success') {
-                const { data } = json;
-                elements.metrics.active.textContent = data.activeTickets || 0;
-                elements.metrics.rating.textContent = data.averageRating || 0;
-                elements.metrics.critical.textContent = data.criticalCases || 0;
-                elements.metrics.wait.textContent = data.waitTimeAlert || 0;
-            } else {
-                console.error('Metrics Error:', json.message);
+            const [statsRes, apptRes, fbRes] = await Promise.all([
+                fetch(`${API_BASE_URL}/stats/dashboard`),
+                fetch(`${API_BASE_URL}/analytics/appointments`),
+                fetch(`${API_BASE_URL}/tickets?status=all`)
+            ]);
+            const stats = await statsRes.json();
+            if (stats.status === 'success') {
+                const d = stats.data;
+                elements.metrics.active.textContent = d.activeTickets || 0;
+                elements.metrics.rating.textContent = (d.averageRating || 0).toFixed(1);
+                elements.metrics.critical.textContent = d.criticalCases || 0;
+                elements.metrics.wait.textContent = d.waitTimeAlert || 0;
+            }
+            // Appointments count
+            const appts = await apptRes.json();
+            if (appts.data && elements.metrics.appts) {
+                elements.metrics.appts.textContent = appts.data.length;
+            }
+            // Verified feedback count
+            const fb = await fbRes.json();
+            if (fb.data && elements.metrics.verified) {
+                const verified = (fb.data || []).filter(t => t.is_verified).length;
+                elements.metrics.verified.textContent = verified;
             }
         } catch (e) { console.error('Metrics Fetch Error:', e); }
     }
@@ -392,44 +417,139 @@ document.addEventListener('DOMContentLoaded', () => {
         Object.values(elements.views).forEach(v => { if (v) v.classList.add('hidden'); });
         if (viewName === 'analytics') {
             elements.views.analyticsView.classList.remove('hidden');
-            renderAnalytics();
-        } else if (viewName === 'heatmap') {
-            elements.views.heatmapView.classList.remove('hidden');
-            renderHeatmap();
+            renderAnalyticsDashboard();
         } else if (viewName === 'appointments') {
             elements.views.appointmentsView.classList.remove('hidden');
             loadAppointments();
+        } else if (viewName === 'emergency') {
+            elements.views.emergencyView.classList.remove('hidden');
+            loadSOSMonitor();
+            loadAmbulanceFleet();
         } else {
             elements.views.ticketView.classList.remove('hidden');
         }
     }
 
-    async function renderAnalytics() {
-        try {
-            const res = await fetch(`${API_BASE_URL}/analytics/performance`);
-            const { data } = await res.json();
-            Plotly.newPlot('deptComparisonChart', [{
-                x: data.map(d => d.department),
-                y: data.map(d => d.totalTickets),
-                type: 'bar',
-                marker: { color: '#2563eb' }
-            }], { height: 350 });
-        } catch (e) { console.error('Analytics Error:', e); }
-    }
+    // Shared Plotly layout defaults for a clean, modern look
+    const CHART_LAYOUT = {
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        font: { family: 'Outfit, Inter, sans-serif', size: 12, color: '#475569' },
+        margin: { t: 10, b: 40, l: 40, r: 10 },
+        showlegend: true,
+        legend: { bgcolor: 'transparent', font: { size: 11 } }
+    };
+    const CHART_CONFIG = { responsive: true, displayModeBar: false };
 
-    async function renderHeatmap() {
-        const res = await fetch(`${API_BASE_URL}/analytics/heatmap`);
-        const { data } = await res.json();
-        const depts = [...new Set(data.map(d => d.department))];
-        const hours = Array.from({ length: 24 }, (_, i) => i);
-        const z = depts.map(d => hours.map(h => {
-            const found = data.find(item => item.department === d && item.hour === h);
-            return found ? found.count : 0;
-        }));
-        Plotly.newPlot('complaintHeatmap', [{
-            x: hours.map(h => h + ":00"),
-            y: depts, z: z, type: 'heatmap', colorscale: [['0.0', '#f8fafc'], ['1.0', '#000000']]
-        }], { height: 450 });
+    async function renderAnalyticsDashboard() {
+        // Fire all 5 data fetches in parallel
+        const [perfRes, hmRes, trendRes, apptRes, statsRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/analytics/performance`).catch(() => null),
+            fetch(`${API_BASE_URL}/analytics/heatmap`).catch(() => null),
+            fetch(`${API_BASE_URL}/analytics/trend`).catch(() => null),
+            fetch(`${API_BASE_URL}/analytics/appointments`).catch(() => null),
+            fetch(`${API_BASE_URL}/stats/dashboard`).catch(() => null)
+        ]);
+
+        // 1. Department Workload — horizontal grouped bar
+        try {
+            const perf = await perfRes.json();
+            const depts = perf.data || [];
+            const names = depts.map(d => d.department);
+            const totals = depts.map(d => d.totalTickets);
+            const resolved = depts.map(d => Math.round(d.totalTickets * (1 - d.slaBreachPct / 100)));
+            Plotly.newPlot('deptComparisonChart', [
+                {
+                    name: 'Total Tickets', x: totals, y: names, type: 'bar', orientation: 'h',
+                    marker: { color: '#6366f1', opacity: 0.85 }
+                },
+                {
+                    name: 'Resolved', x: resolved, y: names, type: 'bar', orientation: 'h',
+                    marker: { color: '#10b981', opacity: 0.85 }
+                }
+            ], {
+                ...CHART_LAYOUT, barmode: 'overlay', height: 300,
+                xaxis: { gridcolor: '#f1f5f9' },
+                yaxis: { automargin: true }
+            }, CHART_CONFIG);
+        } catch (e) { console.warn('Dept chart error', e); }
+
+        // 2. Sentiment Donut — from stats deptCounts or tickets
+        try {
+            const stats = await statsRes.json();
+            const tickets = activeTickets.length ? activeTickets :
+                (await fetch(`${API_BASE_URL}/tickets?status=all`).then(r => r.json()).catch(() => ({ data: [] }))).data || [];
+            const sentCounts = { Positive: 0, Neutral: 0, Negative: 0 };
+            tickets.forEach(t => { if (sentCounts[t.sentiment] !== undefined) sentCounts[t.sentiment]++; });
+            Plotly.newPlot('sentimentDistributionChart', [{
+                labels: Object.keys(sentCounts),
+                values: Object.values(sentCounts),
+                type: 'pie', hole: 0.55,
+                pull: [0, 0, 0.08],
+                marker: { colors: ['#10b981', '#f59e0b', '#ef4444'] },
+                textinfo: 'label+percent',
+                textfont: { size: 12 }
+            }], { ...CHART_LAYOUT, height: 300, showlegend: false }, CHART_CONFIG);
+        } catch (e) { console.warn('Sentiment chart error', e); }
+
+        // 3. Incident Trend — smooth area line
+        try {
+            const trend = await trendRes.json();
+            const td = trend.data || [];
+            Plotly.newPlot('trendChart', [{
+                x: td.map(d => d.date),
+                y: td.map(d => d.count),
+                type: 'scatter', mode: 'lines',
+                fill: 'tozeroy',
+                line: { color: '#6366f1', width: 2.5, shape: 'spline' },
+                fillcolor: 'rgba(99,102,241,0.12)',
+                name: 'Incidents'
+            }], {
+                ...CHART_LAYOUT, height: 260,
+                xaxis: { showgrid: false, tickangle: -30 },
+                yaxis: { gridcolor: '#f1f5f9', rangemode: 'tozero' }
+            }, CHART_CONFIG);
+        } catch (e) { console.warn('Trend chart error', e); }
+
+        // 4. Complaint Heatmap
+        try {
+            const hm = await hmRes.json();
+            const hmData = hm.data || [];
+            const depts2 = [...new Set(hmData.map(d => d.department))];
+            const hours = Array.from({ length: 24 }, (_, i) => i);
+            const z = depts2.map(d => hours.map(h => {
+                const found = hmData.find(item => item.department === d && item.hour === h);
+                return found ? found.count : 0;
+            }));
+            Plotly.newPlot('complaintHeatmap', [{
+                x: hours.map(h => `${h}:00`),
+                y: depts2, z: z,
+                type: 'heatmap',
+                colorscale: [[0, '#f0f9ff'], [0.5, '#6366f1'], [1, '#312e81']],
+                showscale: true,
+                colorbar: { thickness: 12, len: 0.8 }
+            }], {
+                ...CHART_LAYOUT, height: 300,
+                xaxis: { title: 'Hour of Day', tickangle: -45 },
+                yaxis: { automargin: true }
+            }, CHART_CONFIG);
+        } catch (e) { console.warn('Heatmap error', e); }
+
+        // 5. Appointment Status Donut
+        try {
+            const appts = await apptRes.json();
+            const apptData = appts.data || [];
+            const counts = { Scheduled: 0, 'In Progress': 0, Completed: 0, Cancelled: 0 };
+            apptData.forEach(a => { if (counts[a.status] !== undefined) counts[a.status]++; });
+            Plotly.newPlot('apptStatusChart', [{
+                labels: Object.keys(counts),
+                values: Object.values(counts),
+                type: 'pie', hole: 0.55,
+                marker: { colors: ['#3b82f6', '#f59e0b', '#10b981', '#ef4444'] },
+                textinfo: 'label+value',
+                textfont: { size: 12 }
+            }], { ...CHART_LAYOUT, height: 300, showlegend: false }, CHART_CONFIG);
+        } catch (e) { console.warn('Appt chart error', e); }
     }
 
     async function loadAppointments() {
@@ -497,9 +617,110 @@ document.addEventListener('DOMContentLoaded', () => {
                     </td>
                 </tr>`;
             }).join('');
-
         } catch (e) {
             body.innerHTML = `<tr><td colspan="7" class="empty-state" style="color:#ef4444">⚠️ Error loading data</td></tr>`;
+        }
+    }
+
+    // --- SOS MONITOR & FLEET (RESTRUCTURED) ---
+    async function loadSOSMonitor() {
+        const container = document.getElementById('sosCardsContainer');
+        const countEl = document.getElementById('activeSosCount');
+        if (!container) return;
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/admin/emergencies`);
+            const json = await res.json();
+            const data = json.data || [];
+
+            emergencyRequests = data; // Update cache for fleet list cross-ref
+
+            const activeCount = data.filter(r => r.status !== 'Completed').length;
+            if (countEl) countEl.textContent = activeCount;
+
+            if (data.length === 0) {
+                container.innerHTML = '<div class="empty-state">No emergency requests found.</div>';
+                return;
+            }
+
+            container.innerHTML = data.map(r => {
+                const statusClass = `status-${r.status.toLowerCase().replace(' ', '-')}`;
+                const timeStr = new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const acceptedAt = r.accepted_at ? new Date(r.accepted_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--';
+                const completedAt = r.completed_at ? new Date(r.completed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--';
+
+                let driverInfo = r.assigned_driver && r.assigned_driver !== 'N/A'
+                    ? `<strong>${r.assigned_driver}</strong>`
+                    : '<span class="waiting-text">Waiting for Available Driver...</span>';
+
+                if (r.status === 'Completed') driverInfo = r.assigned_driver || 'N/A';
+
+                return `
+                    <div class="sos-card ${statusClass}">
+                        <div class="sos-card-header">
+                            <span class="sos-id">#SOS-${r.id}</span>
+                            <span class="sos-status-badge">${r.status.toUpperCase()}</span>
+                        </div>
+                        <div class="sos-card-body">
+                            <h4>${r.patient_name}</h4>
+                            <div class="sos-info-row"><span>📞</span> ${r.phone}</div>
+                            <div class="sos-info-row"><span>📍</span> ${r.address || 'GPS Coordinates Only'}</div>
+                            <div class="sos-assignment">
+                                <strong>Assigned to:</strong> ${driverInfo}
+                            </div>
+                        </div>
+                        <div class="sos-card-footer">
+                            <div class="sos-time-stack">
+                                <span>Created: ${timeStr}</span>
+                                ${r.accepted_at ? `<span>Accepted: ${acceptedAt}</span>` : ''}
+                                ${r.completed_at ? `<span>Completed: ${completedAt}</span>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } catch (e) {
+            console.error('SOS Monitor Error', e);
+            container.innerHTML = '<div class="empty-state error">Failed to load SOS monitor.</div>';
+        }
+    }
+
+    async function loadAmbulanceFleet() {
+        const list = document.getElementById('driverCardsContainer');
+        if (!list) return;
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/admin/ambulances`);
+            const json = await res.json();
+            const data = json.data || [];
+
+            list.innerHTML = data.map(amb => {
+                const isBusy = amb.status === 'Busy';
+                const statusClass = `status-${amb.status.toLowerCase()}`;
+
+                // Cross-reference with emergencyRequests to find the specific SOS ID
+                const activeSOS = emergencyRequests.find(r => r.assigned_driver === amb.driver_name && r.status !== 'Completed');
+                const sosDisplayId = activeSOS ? `#SOS-${activeSOS.id}` : (amb.active_dispatch ? `#APP-${amb.active_dispatch.id}` : '#N/A');
+
+                return `
+                    <div class="driver-card ${statusClass}">
+                        <div class="driver-card-icon">🚑</div>
+                        <div class="driver-card-info">
+                            <strong>${amb.driver_name}</strong>
+                            <span class="veh-num">${amb.vehicle_number}</span>
+                            <div class="driver-status-pill">${amb.status.toUpperCase()}</div>
+                            ${isBusy ? `
+                                <div class="driver-assignment">
+                                    🤖 Handling Emergency <span class="sos-link">${sosDisplayId}</span>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } catch (e) {
+            console.error('Fleet Load Error', e);
+            list.innerHTML = '<div class="empty-state error">Failed to load drivers.</div>';
         }
     }
 

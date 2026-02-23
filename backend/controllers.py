@@ -5,8 +5,10 @@ from flask_login import current_user
 from services.recovery_service import RecoveryService
 from services.sla_tracker import SLATracker
 from services.ai_response_service import AIResponseService
+from services.triage_service import TriageService
+from services.ambulance_service import AmbulanceService
 from services.email_service import send_appointment_confirmation
-from database.models import Feedback, Ticket, Department, User, Appointment, db, EscalationLog, AIResponseLog
+from database.models import Feedback, Ticket, Department, User, Appointment, db, EscalationLog, AIResponseLog, Ambulance, EmergencyDispatch, EmergencyRequest
 from utils.helpers import format_response
 from utils.logger import app_logger
 import json
@@ -14,6 +16,8 @@ import json
 recovery_service = RecoveryService()
 sla_tracker = SLATracker()
 ai_responder = AIResponseService()
+triage_service = TriageService()
+ambulance_service = AmbulanceService()
 
 def submit_feedback():
     data = request.get_json()
@@ -54,14 +58,16 @@ def submit_feedback():
                 if appt.doctor:
                     linked_doctor_name = appt.doctor.name
 
-                # === PRIORITY BOOST RULE ===
-                # If verified, reduce SLA time by 30%
+                # === PRIORITY BOOST RULE (MASTER PHASE 1) ===
                 ticket = Ticket.query.filter_by(feedback_id=feedback_id).first()
                 if ticket:
-                    # Original SLA duration in seconds
-                    total_seconds = (ticket.sla_deadline - feedback.created_at).total_seconds()
-                    # 30% reduction: new deadline = created_at + (70% of original duration)
-                    new_deadline = feedback.created_at + timedelta(seconds=total_seconds * 0.7)
+                    # Determine current base from ticket severity
+                    severity_map = {"Critical": "Emergency", "High": "Urgent", "Medium": "Normal", "Low": "Normal"}
+                    base_type = severity_map.get(ticket.severity, "Normal")
+                    
+                    # Calculate boosted SLA
+                    sla_mins = triage_service.calculate_dynamic_sla(base_type, is_verified=True)
+                    new_deadline = feedback.created_at + timedelta(minutes=sla_mins)
                     ticket.sla_deadline = new_deadline
 
                     history = json.loads(ticket.status_history_log) if ticket.status_history_log else []
@@ -79,16 +85,16 @@ def submit_feedback():
                                 ticket.status = 'In Progress'
                                 doctor.active_tasks = (doctor.active_tasks or 0) + 1
 
-                            history.append({
-                                "status":    ticket.status,
-                                "timestamp": datetime.utcnow().isoformat() + "Z",
-                                "action":    f"✅ VERIFIED – linked to Appointment #{appt.id}, doctor: {linked_doctor_name or 'N/A'}"
-                            })
+                                history.append({
+                                    "status":    ticket.status,
+                                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                                    "action":    f"✅ VERIFIED – linked to Appointment #{appt.id}, doctor: {linked_doctor_name or 'N/A'}"
+                                })
 
                     history.append({
                         "status":    ticket.status,
                         "timestamp": datetime.utcnow().isoformat() + "Z",
-                        "action":    "🚀 PRIORITY BOOST – SLA reduced by 30% (Verified Patient)"
+                        "action":    f"🚀 AI PRIORITY BOOST – SLA set to {sla_mins}m (Verified Patient)"
                     })
                     ticket.status_history_log = json.dumps(history)
 
@@ -139,6 +145,10 @@ def get_tickets():
         dept_filter = request.args.get('department')
         if dept_filter and dept_filter != 'all':
             query = query.filter(Department.name == dept_filter)
+
+        sentiment_filter = request.args.get('sentiment')
+        if sentiment_filter and sentiment_filter != 'all':
+            query = query.filter(Feedback.sentiment == sentiment_filter)
 
         tickets = query.order_by(
             case((Ticket.status == 'Escalated', 0), else_=1).asc(),
@@ -329,10 +339,33 @@ def resolve_ticket(id):
 # --- STAFF PORTAL ENDPOINTS ---
 
 def get_staff_profile():
+    """DYNAMIC PROFILE: Recalculate load from all active streams (Tickets + Emergencies)"""
     user = current_user
-    max_tickets = 10
-    load_pct = min(100, (user.active_tasks / max_tickets) * 100)
     
+    # 1. Active Recovery Tickets
+    active_tickets = Ticket.query.filter(
+        Ticket.assigned_user_id == user.id,
+        Ticket.status.in_(['Open', 'In Progress', 'Escalated'])
+    ).count()
+    
+    # 2. Active Emergency Missions
+    active_emergencies = EmergencyRequest.query.filter(
+        EmergencyRequest.assigned_driver_id == user.id,
+        EmergencyRequest.status.in_(['Dispatched', 'In Transit'])
+    ).count()
+
+    total_active = active_tickets + active_emergencies
+    
+    # Load Threshold: 5 active items = 100% Load
+    # For drivers, 1 mission = 20% load, but "In Transit" is mentally 100%. 
+    # For now, let's stick to a baseline of 5 total items for better visualization.
+    load_pct = min(100, (total_active / 5) * 100)
+    
+    # Update the cache field if needed (mostly for admin stats consistency)
+    if user.active_tasks != total_active:
+        user.active_tasks = total_active
+        db.session.commit()
+
     return jsonify(format_response("success", data={
         "id": user.id,
         "name": user.name,
@@ -340,11 +373,75 @@ def get_staff_profile():
         "role": user.role,
         "department": user.department,
         "designation": user.designation,
-        "active_tasks": user.active_tasks,
+        "active_tasks": total_active,
         "avg_res_time": round(user.avg_resolution_time),
         "success_rate": user.performance_rating,
         "load_pct": round(load_pct)
     }))
+
+# ── DOCTOR APPOINTMENT CONTROLLERS ───────────────────────────────────────────
+
+def get_doctor_appointments():
+    """Return all appointments assigned to the logged-in doctor, newest first."""
+    try:
+        appts = Appointment.query.filter_by(
+            doctor_id=current_user.id
+        ).order_by(Appointment.appointment_date.desc()).all()
+
+        result = []
+        for a in appts:
+            result.append({
+                "id":               a.id,
+                "patient_name":     a.patient_name,
+                "patient_email":    a.patient_email,
+                "department":       a.department.name if a.department else "—",
+                "appointment_date": a.appointment_date,
+                "time_slot":        a.time_slot,
+                "status":           a.status,
+                "type":             a.appointment_type,
+                "completed_at":     a.completed_at.isoformat() + "Z" if a.completed_at else None,
+                "created_at":       a.created_at.isoformat() + "Z"
+            })
+        return jsonify(format_response("success", data=result))
+    except Exception as e:
+        app_logger.error(f"get_doctor_appointments error: {e}")
+        return jsonify(format_response("error", message=str(e))), 500
+
+
+def complete_appointment(appt_id):
+    """Doctor marks their own appointment as Completed."""
+    try:
+        appt = Appointment.query.get(appt_id)
+        if not appt:
+            return jsonify(format_response("error", message="Appointment not found")), 404
+
+        # Safety Rule 1: Only the assigned doctor can complete it
+        if appt.doctor_id != current_user.id:
+            app_logger.warning(f"Unauthorised complete attempt: user {current_user.id} on appt {appt_id}")
+            return jsonify(format_response("error", message="You are not assigned to this appointment")), 403
+
+        # Safety Rule 2: Cannot complete an already-completed appointment
+        if appt.status == 'Completed':
+            return jsonify(format_response("error", message="Appointment is already completed")), 400
+
+        # Mark completed
+        appt.status       = 'Completed'
+        appt.completed_at = datetime.utcnow()
+
+        # Decrement doctor load (floor at 0)
+        current_user.active_appointments = max(0, (current_user.active_appointments or 0) - 1)
+
+        db.session.commit()
+        app_logger.info(f"Dr. {current_user.name} completed Appointment #{appt_id} for {appt.patient_name}")
+        return jsonify(format_response("success", message="Appointment marked as Completed",
+                                       data={"id": appt.id, "status": appt.status,
+                                             "completed_at": appt.completed_at.isoformat() + "Z"}))
+    except Exception as e:
+        db.session.rollback()
+        app_logger.error(f"complete_appointment error: {e}")
+        return jsonify(format_response("error", message=str(e))), 500
+
+
 
 def get_staff_tasks():
     # Return any active task assigned to the current user (Open or In Progress)
@@ -420,6 +517,67 @@ def complete_staff_task(id):
         return jsonify(format_response("error", message=str(e))), 500
 
 # --- OTHER ENDPOINTS ---
+
+def create_emergency():
+    """PART 1 & 3: Create emergency and auto-dispatch nearest driver."""
+    data = request.get_json(force=True, silent=True) or {}
+    
+    name = data.get('name')
+    phone = data.get('phone')
+    address = data.get('address')
+    lat = data.get('latitude')
+    lng = data.get('longitude')
+    
+    if not name or not phone or not address:
+        return jsonify(format_response("error", message="Missing Name, Phone or Address")), 400
+
+    try:
+        req = ambulance_service.handle_emergency_request(name, phone, address, lat, lng)
+        if not req:
+             return jsonify(format_response("error", message="No available ambulances. Please call emergency services.")), 404
+
+        # Assigned driver info
+        amb = Ambulance.query.filter_by(driver_id=req.assigned_driver_id).first()
+        
+        return jsonify(format_response("success",
+            message="Emergency Dispatched.",
+            data={
+                "request_id": req.id,
+                "ambulance": {
+                    "number": amb.vehicle_number if amb else "N/A",
+                    "driver": amb.driver_name if amb else "N/A"
+                }
+            }
+        )), 201
+
+    except Exception as e:
+        db.session.rollback()
+        app_logger.error(f"Emergency Creation Error: {e}")
+        return jsonify(format_response("error", message=str(e))), 500
+
+def get_active_emergencies():
+    """PART 6: Admin View - All active/recent emergency requests."""
+    try:
+        from database.models import EmergencyRequest
+        # Show all for audit, order by most recent
+        active = EmergencyRequest.query.order_by(EmergencyRequest.created_at.desc()).limit(50).all()
+        
+        result = []
+        for r in active:
+            result.append({
+                "id": r.id,
+                "patient_name": r.patient_name,
+                "phone": r.phone_number,
+                "address": r.address,
+                "created_at": r.created_at.isoformat() + "Z",
+                "accepted_at": r.accepted_at.isoformat() + "Z" if r.accepted_at else None,
+                "completed_at": r.completed_at.isoformat() + "Z" if r.completed_at else None,
+                "status": r.status,
+                "assigned_driver": r.assigned_driver.name if r.assigned_driver else "N/A"
+            })
+        return jsonify(format_response("success", data=result))
+    except Exception as e:
+        return jsonify(format_response("error", message=str(e))), 500
 
 def get_department_performance():
     try:
@@ -513,6 +671,25 @@ def book_appointment():
             if not doctor or doctor.role != 'staff':
                 doctor_id = None
 
+        # ── AI LOAD-BALANCING AUTO-ASSIGNMENT ─────────────────────────────
+        # If no doctor was selected, pick the least-loaded doctor in the dept
+        if not doctor_id:
+            candidates = User.query.filter_by(
+                department=dept.name, role='staff'
+            ).order_by(User.active_appointments.asc()).all()
+            # Exclude drivers (designation contains 'Driver')
+            candidates = [u for u in candidates
+                          if not (u.designation or '').lower().startswith('driver')]
+            if candidates:
+                assigned = candidates[0]
+                doctor_id = assigned.id
+                assigned.active_appointments += 1
+                app_logger.info(f"AI assigned Dr. {assigned.name} (load: {assigned.active_appointments}) to new appointment")
+
+        # AI TRIAGE LAYER
+        patient_notes = data.get('notes', '')
+        appt_type = triage_service.classify_appointment(patient_notes)
+        
         appt = Appointment(
             patient_name=data['patient_name'].strip(),
             patient_email=data['patient_email'].strip().lower(),
@@ -520,15 +697,35 @@ def book_appointment():
             doctor_id=doctor_id,
             appointment_date=data['appointment_date'],
             time_slot=data['time_slot'],
-            status='Scheduled'
+            status='Scheduled',
+            appointment_type=appt_type
         )
         db.session.add(appt)
+        db.session.flush() # get ID
+
+        # AI AMBULANCE DISPATCH SYSTEM
+        dispatched_amb = None
+        if appt_type == "Emergency":
+            dispatched_amb = ambulance_service.dispatch_ambulance(appt)
+
+        # When doctor was manually chosen (not AI-assigned), still bump their counter
+        elif doctor_id:
+            manual_doc = User.query.get(doctor_id)
+            if manual_doc:
+                manual_doc.active_appointments += 1
+
         db.session.commit()
 
         # Send email confirmation (non-blocking — logs on failure)
-        from app import mail
         doctor_name = User.query.get(doctor_id).name if doctor_id else None
-        send_appointment_confirmation(mail, appt, dept.name, doctor_name)
+        try:
+            mail = current_app.extensions.get('mail')
+            if mail:
+                send_appointment_confirmation(mail, appt, dept.name, doctor_name)
+            else:
+                app_logger.warning("Flask-Mail not configured; skipping appointment confirmation email")
+        except Exception as mail_err:
+            app_logger.warning(f"Email send failed (non-blocking): {mail_err}")
 
         app_logger.info(f"Appointment #{appt.id} booked: {appt.patient_name} -> {dept.name} on {appt.appointment_date}")
 
@@ -541,7 +738,12 @@ def book_appointment():
                 "doctor": doctor_name or "To be assigned",
                 "date": appt.appointment_date,
                 "time": appt.time_slot,
-                "status": appt.status
+                "status": appt.status,
+                "type": appt.appointment_type,
+                "ambulance": {
+                    "number": dispatched_amb.vehicle_number,
+                    "driver": dispatched_amb.driver_name
+                } if dispatched_amb else None
             }
         )), 201
     except Exception as e:
@@ -566,11 +768,202 @@ def get_appointments():
                 "appointment_date": a.appointment_date,
                 "time_slot":        a.time_slot,
                 "status":           a.status,
+                "type":             a.appointment_type,
+                "ambulance_id":     a.ambulance_id,
+                "ambulance_number": a.ambulance.vehicle_number if a.ambulance else None,
                 "completed_at":     a.completed_at.isoformat() + "Z" if a.completed_at else None,
                 "created_at":       a.created_at.isoformat() + "Z"
             })
         return jsonify(format_response("success", data=result))
     except Exception as e:
+        return jsonify(format_response("error", message=str(e))), 500
+
+def get_ambulances():
+    """Get all ambulances for emergency monitor with dispatch details."""
+    try:
+        ambs = ambulance_service.get_all_ambulances()
+        result = []
+        for a in ambs:
+            dispatch_info = None
+            # Check for active dispatch involving this ambulance or driver
+            active_dispatch = EmergencyDispatch.query.filter(
+                (EmergencyDispatch.dispatch_status != 'Closed') &
+                ((EmergencyDispatch.primary_driver_id == a.driver_id) | 
+                 (EmergencyDispatch.secondary_driver_id == a.driver_id))
+            ).order_by(EmergencyDispatch.first_alert_time.desc()).first()
+
+            if active_dispatch:
+                dispatch_info = {
+                    "id": active_dispatch.id,
+                    "status": active_dispatch.dispatch_status,
+                    "primary_driver": active_dispatch.primary_driver.name if active_dispatch.primary_driver else "N/A",
+                    "secondary_driver": active_dispatch.secondary_driver.name if active_dispatch.secondary_driver else "N/A",
+                    "accepted_by": active_dispatch.assigned_driver.name if active_dispatch.assigned_driver else None,
+                    "first_alert": active_dispatch.first_alert_time.isoformat() + "Z",
+                    "accepted_at": active_dispatch.accepted_at.isoformat() + "Z" if active_dispatch.accepted_at else None
+                }
+
+            result.append({
+                "id": a.id,
+                "vehicle_number": a.vehicle_number,
+                "driver_name": a.driver_name,
+                "driver_id": a.driver_id,
+                "status": a.status,
+                "lat": a.current_lat,
+                "lng": a.current_lng,
+                "target_lat": a.target_lat,
+                "target_lng": a.target_lng,
+                "last_update": a.last_update.isoformat() + "Z" if a.last_update else None,
+                "active_dispatch": dispatch_info
+            })
+        return jsonify(format_response("success", data=result))
+    except Exception as e:
+        return jsonify(format_response("error", message=str(e))), 500
+
+def get_my_emergency():
+    """DRIVER ALERT SYSTEM: GET /api/driver/emergency-status"""
+    try:
+        from database.models import EmergencyRequest, Ambulance
+        # Check for active emergency assigned to current driver
+        req = EmergencyRequest.query.filter(
+            (EmergencyRequest.assigned_driver_id == current_user.id) &
+            (EmergencyRequest.status.in_(['Dispatched', 'In Transit']))
+        ).first()
+
+        if not req:
+            return jsonify(format_response("success", data=None))
+
+        return jsonify(format_response("success", data={
+            "id": req.id,
+            "patient_name": req.patient_name or "Unknown",
+            "phone": req.phone_number,
+            "address": req.address or "Location details pending",
+            "lat": req.latitude,
+            "lng": req.longitude,
+            "status": req.status,
+            "created_at": req.created_at.isoformat() + "Z",
+            "maps_link": f"https://www.google.com/maps?q={req.latitude},{req.longitude}" if req.latitude else None
+        }))
+    except Exception as e:
+        app_logger.error(f"Error in get_my_emergency: {e}")
+        return jsonify(format_response("error", message=str(e))), 500
+
+def accept_emergency_dispatch(id):
+    """POST /api/driver/accept/<id> - Race-condition safe acceptance."""
+    try:
+        import random
+        dispatch = EmergencyDispatch.query.get(id)
+        if not dispatch:
+            return jsonify(format_response("error", message="Dispatch not found")), 404
+            
+        if dispatch.assigned_driver_id is not None:
+             return jsonify(format_response("error", message="Dispatch already handled.")), 400
+             
+        # Check if user IS a driver with an ambulance
+        amb = Ambulance.query.filter_by(driver_id=current_user.id).first()
+        if not amb:
+            return jsonify(format_response("error", message="Access Denied: No ambulance linked to this account.")), 403
+
+        # Lock Dispatch
+        dispatch.assigned_driver_id = current_user.id
+        dispatch.dispatch_status = "Accepted"
+        dispatch.accepted_at = datetime.utcnow()
+        
+        # Simulated target (Patient location)
+        p_lat = 12.9716 + (random.random() - 0.5) * 0.05
+        p_lng = 77.5946 + (random.random() - 0.5) * 0.05
+        
+        # Update Ambulance status
+        amb.status = "Busy"
+        amb.target_lat = p_lat
+        amb.target_lng = p_lng
+        # Update Appointment
+        appt = dispatch.appointment
+        if appt:
+            appt.status = "In Transit"
+        # Update Ambulance status
+        amb.status = "Busy"
+        amb.target_lat = p_lat
+        amb.target_lng = p_lng
+
+        # IMPORTANT: Sync Active Task Count
+        current_user.active_tasks = (current_user.active_tasks or 0) + 1
+            
+        db.session.commit()
+        app_logger.info(f"Driver {current_user.name} accepted dispatch #{id}")
+        
+        return jsonify(format_response("success", message="Dispatch Accepted"))
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(format_response("error", message=str(e))), 500
+
+def accept_emergency_request(id):
+    """TRIP START FLOW: POST /api/driver/emergency/accept/<id>"""
+    try:
+        from database.models import EmergencyRequest, Ambulance
+        req = EmergencyRequest.query.get(id)
+        if not req:
+            return jsonify(format_response("error", message="Emergency request not found")), 404
+            
+        if req.assigned_driver_id != current_user.id:
+             return jsonify(format_response("error", message="This emergency is not assigned to you.")), 403
+
+        if req.status != "Dispatched":
+            return jsonify(format_response("error", message=f"Invalid state: Cannot accept from status '{req.status}'")), 400
+
+        # Update to In Transit
+        req.status = "In Transit"
+        req.accepted_at = datetime.utcnow()
+        
+        # Sync Ambulance status
+        amb = Ambulance.query.filter_by(driver_id=current_user.id).first()
+        if amb:
+            amb.status = "Busy"
+            if req.latitude and req.longitude:
+                amb.target_lat = req.latitude
+                amb.target_lng = req.longitude
+        
+        # IMPORTANT: Sync Active Task Count
+        current_user.active_tasks = (current_user.active_tasks or 0) + 1
+        
+        db.session.commit()
+        app_logger.info(f"🚨 TRIP STARTED: Driver {current_user.name} for Emergency #{id}")
+        return jsonify(format_response("success", message="Trip Started. Safe driving."))
+    except Exception as e:
+        db.session.rollback()
+        app_logger.error(f"Error accepting emergency {id}: {e}")
+        return jsonify(format_response("error", message=str(e))), 500
+
+def complete_emergency_request(id):
+    """TRIP COMPLETION FLOW: POST /api/driver/complete/<id>"""
+    try:
+        from database.models import EmergencyRequest, Ambulance
+        req = EmergencyRequest.query.get(id)
+        if not req:
+            return jsonify(format_response("error", message="Request not found")), 404
+            
+        if req.assigned_driver_id != current_user.id:
+             return jsonify(format_response("error", message="Access Denied.")), 403
+
+        # Update to Completed
+        req.status = "Completed"
+        req.completed_at = datetime.utcnow()
+        
+        # Free up Ambulance
+        amb = Ambulance.query.filter_by(driver_id=current_user.id).first()
+        if amb:
+            amb.status = "Available"
+            amb.target_lat = None
+            amb.target_lng = None
+        
+        # IMPORTANT: Sync Active Task Count
+        current_user.active_tasks = max(0, (current_user.active_tasks or 0) - 1)
+        
+        db.session.commit()
+        app_logger.info(f"✅ TRIP COMPLETED: Emergency #{id}")
+        return jsonify(format_response("success", message="Trip Completed. Ambulance available."))
+    except Exception as e:
+        db.session.rollback()
         return jsonify(format_response("error", message=str(e))), 500
 
 
