@@ -1684,3 +1684,602 @@ img {
         padding: 16px 20px;
     }
 }
+
+/* ================================================================
+   SOS REDESIGN - HIGH-PRIORITY EMERGENCY INTERFACE
+   ================================================================ */
+
+.sos-modal {
+    max-width: 540px !important;
+    border-radius: 32px !important;
+    padding: 0 !important;
+    overflow: hidden;
+    background: white !important;
+    box-shadow: 0 25px 50px -12px rgba(220, 38, 38, 0.25) !important;
+    border: 1px solid rgba(239, 68, 68, 0.1) !important;
+    position: relative;
+    animation: modalSlideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalSlideUp {
+    from {
+        transform: translateY(50px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.sos-modal-header {
+    background: linear-gradient(to bottom, #fff5f5, #ffffff);
+    padding: 40px 40px 20px;
+    text-align: center;
+}
+
+.sos-modal-body {
+    padding: 0 40px 48px;
+}
+
+.modal-x {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: #f8fafc;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid #e2e8f0;
+    cursor: pointer;
+    z-index: 10;
+}
+
+.modal-x:hover {
+    background: #fee2e2;
+    color: #ef4444;
+    border-color: #fecaca;
+    transform: rotate(90deg);
+}
+
+.sos-icon-lg {
+    font-size: 4.5rem;
+    margin-bottom: 16px;
+    text-align: center;
+    line-height: 1;
+    filter: drop-shadow(0 4px 12px rgba(239, 68, 68, 0.2));
+}
+
+.sos-title {
+    font-size: 2.25rem;
+    font-weight: 900;
+    color: #0f172a;
+    margin-bottom: 10px;
+    text-align: center;
+    letter-spacing: -1px;
+    line-height: 1.1;
+}
+
+.sos-desc {
+    color: #475569;
+    text-align: center;
+    margin-bottom: 0;
+    font-size: 1.125rem;
+    line-height: 1.6;
+    max-width: 90%;
+    margin-left: auto;
+    margin-right: auto;
+    font-weight: 500;
+}
+
+.sos-form .form-group {
+    margin-bottom: 24px;
+}
+
+.sos-form .form-label {
+    font-size: 1rem;
+    font-weight: 800;
+    color: #1e293b;
+    margin-bottom: 10px;
+    display: block;
+    letter-spacing: -0.25px;
+}
+
+.sos-form .form-label span {
+    font-weight: 500 !important;
+    font-size: 0.85rem !important;
+}
+
+.sos-form .form-input {
+    width: 100%;
+    padding: 18px 24px;
+    border: 2.5px solid #e2e8f0;
+    border-radius: 16px;
+    font-size: 1.1rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    background: #f8fafc;
+    color: #0f172a;
+}
+
+.sos-form .form-input:focus {
+    border-color: #ef4444;
+    background: white;
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.12);
+    outline: none;
+}
+
+/* GPS / Location Status - Premium Card */
+.sos-gps-status {
+    background: #f1f5f9;
+    border: 2px solid #e2e8f0;
+    border-radius: 20px;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 32px;
+    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.sos-gps-status.success {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+}
+
+.sos-gps-status.success .gps-icon-wrap {
+    background: #10b981;
+    color: white;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+}
+
+.sos-gps-status.failed {
+    background: #fff1f2;
+    border-color: #fecaca;
+}
+
+.sos-gps-status.failed .gps-icon-wrap {
+    background: #ef4444;
+    color: white;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
+}
+
+.gps-icon-wrap {
+    width: 56px;
+    height: 56px;
+    background: white;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.75rem;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+}
+
+.gps-text-wrap {
+    display: flex;
+    flex-direction: column;
+}
+
+.gps-label {
+    font-weight: 900;
+    color: #0f172a;
+    font-size: 1.1rem;
+    line-height: 1.2;
+}
+
+.gps-sublabel {
+    font-size: 0.9rem;
+    color: #64748b;
+    margin-top: 3px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+}
+
+/* THE DISPATCH BUTTON - MASSIVE & TAPPABLE */
+.btn-sos-dispatch {
+    width: 100%;
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #991b1b 100%);
+    color: white;
+    padding: 30px 28px;
+    border-radius: 24px;
+    border: none;
+    box-shadow: 0 20px 40px -10px rgba(239, 68, 68, 0.5);
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    margin-top: 8px;
+}
+
+.btn-sos-dispatch:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 25px 50px -5px rgba(239, 68, 68, 0.6);
+}
+
+.btn-sos-dispatch:active {
+    transform: translateY(-2px) scale(0.97);
+}
+
+#sosBtnInner {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    z-index: 2;
+}
+
+.dispatch-icon {
+    font-size: 3.5rem;
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.3));
+    animation: bounceRight 2s infinite;
+}
+
+.dispatch-text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+}
+
+.dispatch-text strong {
+    font-size: 1.65rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+    line-height: 1;
+}
+
+.dispatch-text small {
+    font-size: 1rem;
+    opacity: 0.95;
+    font-weight: 600;
+}
+
+/* Animations */
+.pulse-alert {
+    animation: sosPulse 2.5s infinite;
+}
+
+@keyframes sosPulse {
+    0% {
+        transform: scale(1);
+        filter: brightness(1);
+    }
+
+    50% {
+        transform: scale(1.1);
+        filter: brightness(1.2);
+    }
+
+    100% {
+        transform: scale(1);
+        filter: brightness(1);
+    }
+}
+
+@keyframes bounceRight {
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    50% {
+        transform: translateX(12px);
+    }
+}
+
+/* Loading State */
+.sos-loading-state {
+    font-size: 1.25rem;
+    font-weight: 900;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.sos-loading-state::before {
+    content: '🚑';
+    animation: driving 1.5s infinite linear;
+    font-size: 2rem;
+}
+
+@keyframes driving {
+    0% {
+        transform: translateX(-20px);
+        opacity: 0;
+    }
+
+    50% {
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateX(20px);
+        opacity: 0;
+    }
+}
+
+/* Mobile Adjustments */
+@media (max-width: 520px) {
+    .sos-modal {
+        margin: 16px;
+        width: calc(100% - 32px);
+    }
+
+    .sos-modal-header {
+        padding: 32px 24px 12px;
+    }
+
+    .sos-modal-body {
+        padding: 0 24px 32px;
+    }
+
+    .sos-title {
+        font-size: 1.75rem;
+    }
+
+    .btn-sos-dispatch {
+        padding: 26px 20px;
+        border-radius: 20px;
+    }
+
+    .dispatch-icon {
+        font-size: 2.75rem;
+    }
+
+    .dispatch-text strong {
+        font-size: 1.35rem;
+    }
+
+    .gps-icon-wrap {
+        width: 48px;
+        height: 48px;
+        font-size: 1.4rem;
+    }
+}
+
+.sos-icon-lg {
+    font-size: 4rem;
+    margin-bottom: 12px;
+    text-align: center;
+    line-height: 1;
+}
+
+.sos-title {
+    font-size: 2rem;
+    font-weight: 900;
+    color: #0f172a;
+    margin-bottom: 8px;
+    text-align: center;
+    letter-spacing: -0.75px;
+}
+
+.sos-desc {
+    color: #475569;
+    text-align: center;
+    margin-bottom: 32px;
+    font-size: 1.125rem;
+    line-height: 1.6;
+    max-width: 90%;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.sos-form .form-group {
+    margin-bottom: 24px;
+}
+
+.sos-form .form-label {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 10px;
+    display: block;
+}
+
+.sos-form .form-input {
+    width: 100%;
+    padding: 16px 20px;
+    border: 2.5px solid #e2e8f0;
+    border-radius: 14px;
+    font-size: 1.1rem;
+    transition: all 0.25s ease;
+    background: #f8fafc;
+}
+
+.sos-form .form-input:focus {
+    border-color: #ef4444;
+    background: white;
+    box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.15);
+    outline: none;
+}
+
+/* GPS / Location Status */
+.sos-gps-status {
+    background: #f1f5f9;
+    border: 2px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 18px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 28px;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.gps-icon-wrap {
+    width: 52px;
+    height: 52px;
+    background: white;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    flex-shrink: 0;
+}
+
+.gps-text-wrap {
+    display: flex;
+    flex-direction: column;
+}
+
+.gps-label {
+    font-weight: 800;
+    color: #0f172a;
+    font-size: 1.05rem;
+    line-height: 1.2;
+}
+
+.gps-sublabel {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-top: 2px;
+}
+
+/* THE DISPATCH BUTTON - MASSIVE & TAPPABLE */
+.btn-sos-dispatch {
+    width: 100%;
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #991b1b 100%);
+    color: white;
+    padding: 28px 24px;
+    border-radius: 20px;
+    border: none;
+    box-shadow: 0 15px 35px -5px rgba(239, 68, 68, 0.45);
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    margin-top: 8px;
+}
+
+.btn-sos-dispatch:hover {
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 0 20px 40px -5px rgba(239, 68, 68, 0.55);
+}
+
+.btn-sos-dispatch:active {
+    transform: translateY(-2px) scale(0.98);
+}
+
+#sosBtnInner {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    z-index: 2;
+}
+
+.dispatch-icon {
+    font-size: 3rem;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+    animation: bounceRight 2s infinite;
+}
+
+.dispatch-text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+}
+
+.dispatch-text strong {
+    font-size: 1.5rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.75px;
+    margin-bottom: 4px;
+    line-height: 1;
+}
+
+.dispatch-text small {
+    font-size: 0.95rem;
+    opacity: 0.95;
+    font-weight: 600;
+}
+
+/* Animations */
+.pulse-alert {
+    animation: sosPulse 2.5s infinite;
+}
+
+@keyframes sosPulse {
+    0% {
+        transform: scale(1);
+        filter: brightness(1);
+    }
+
+    50% {
+        transform: scale(1.05);
+        filter: brightness(1.2);
+    }
+
+    100% {
+        transform: scale(1);
+        filter: brightness(1);
+    }
+}
+
+@keyframes bounceRight {
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    50% {
+        transform: translateX(8px);
+    }
+}
+
+/* Loading State */
+.sos-loading-state {
+    font-size: 1.1rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Mobile Adjustments */
+@media (max-width: 500px) {
+    .sos-modal {
+        padding: 32px 24px !important;
+        margin: 16px !important;
+    }
+
+    .sos-title {
+        font-size: 1.75rem;
+    }
+
+    .btn-sos-dispatch {
+        padding: 24px 20px;
+    }
+
+    .dispatch-icon {
+        font-size: 2.5rem;
+    }
+
+    .dispatch-text strong {
+        font-size: 1.25rem;
+    }
+}
