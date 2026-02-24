@@ -1,5 +1,5 @@
 /* ============================================
-   AUREVIA MEDICAL INSTITUTE - JAVASCRIPT
+   CAREAXIS MEDICAL INSTITUTE - JAVASCRIPT
    ============================================ */
 
 // Constants
@@ -55,7 +55,7 @@ feedbackMessage.addEventListener('input', (e) => {
     const maxLength = 500;
     const currentLength = e.target.value.length;
     charCount.textContent = Math.min(currentLength, maxLength);
-    
+
     // Truncate if exceeds max length
     if (currentLength > maxLength) {
         e.target.value = e.target.value.substring(0, maxLength);
@@ -69,17 +69,17 @@ feedbackMessage.addEventListener('input', (e) => {
 
 const validateForm = () => {
     let isValid = true;
-    
+
     // Clear previous errors
     clearAllErrors();
-    
+
     // Validate Patient ID
     const patientId = document.getElementById('patientId').value.trim();
     if (!patientId) {
         showError('patientId', 'Patient ID is required');
         isValid = false;
     }
-    
+
     // Validate Feedback Message
     const feedback = document.getElementById('feedbackMessage').value.trim();
     if (!feedback) {
@@ -89,26 +89,26 @@ const validateForm = () => {
         showError('feedbackMessage', 'Feedback must be at least 10 characters');
         isValid = false;
     }
-    
+
     // Validate Rating
     const rating = document.querySelector('input[name="rating"]:checked');
     if (!rating) {
         showError('rating', 'Please select a rating');
         isValid = false;
     }
-    
+
     return isValid;
 };
 
 const showError = (fieldName, message) => {
     const errorElement = document.getElementById(fieldName + 'Error');
     const inputElement = document.getElementById(fieldName);
-    
+
     if (errorElement) {
         errorElement.textContent = message;
         errorElement.classList.add('show');
     }
-    
+
     if (inputElement && inputElement.type !== 'radio') {
         inputElement.classList.add('error');
     }
@@ -119,7 +119,7 @@ const clearAllErrors = () => {
         el.classList.remove('show');
         el.textContent = '';
     });
-    
+
     document.querySelectorAll('.form-input, .form-textarea').forEach(el => {
         el.classList.remove('error');
     });
@@ -127,7 +127,7 @@ const clearAllErrors = () => {
 
 // Remove error on input
 document.querySelectorAll('.form-input, .form-textarea').forEach(input => {
-    input.addEventListener('input', function() {
+    input.addEventListener('input', function () {
         if (this.classList.contains('error')) {
             this.classList.remove('error');
             const errorId = this.id + 'Error';
@@ -141,7 +141,7 @@ document.querySelectorAll('.form-input, .form-textarea').forEach(input => {
 
 // Remove rating error on selection
 document.querySelectorAll('input[name="rating"]').forEach(radio => {
-    radio.addEventListener('change', function() {
+    radio.addEventListener('change', function () {
         const errorEl = document.getElementById('ratingError');
         if (errorEl) {
             errorEl.classList.remove('show');
@@ -155,17 +155,17 @@ document.querySelectorAll('input[name="rating"]').forEach(radio => {
 
 feedbackForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    
+
     // Validate form
     if (!validateForm()) {
         return;
     }
-    
+
     try {
         // Show loading state
         submitBtn.disabled = true;
         loadingSpinner.classList.add('show');
-        
+
         // Collect form data
         const patientId = document.getElementById('patientId').value.trim();
         const fullName = document.getElementById('fullName').value.trim();
@@ -174,7 +174,7 @@ feedbackForm.addEventListener('submit', async (e) => {
         const visitDate = document.getElementById('visitDate').value;
         const rating = document.querySelector('input[name="rating"]:checked').value;
         const feedbackText = document.getElementById('feedbackMessage').value.trim();
-        
+
         // Prepare payload
         const payload = {
             patient_id: patientId,
@@ -185,7 +185,7 @@ feedbackForm.addEventListener('submit', async (e) => {
             visit_date: visitDate || null,
             rating: parseInt(rating) || null
         };
-        
+
         // Make API request
         const response = await fetch(`${API_BASE_URL}/api/submit-feedback`, {
             method: 'POST',
@@ -194,13 +194,13 @@ feedbackForm.addEventListener('submit', async (e) => {
             },
             body: JSON.stringify(payload)
         });
-        
+
         if (!response.ok) {
             throw new Error(`API Error: ${response.statusText}`);
         }
-        
+
         const data = await response.json();
-        
+
         // Handle success
         if (data.status === 'success') {
             showSuccessModal(data.data);
@@ -210,7 +210,7 @@ feedbackForm.addEventListener('submit', async (e) => {
         } else {
             showErrorModal(data.message || 'Unable to process feedback. Please try again.');
         }
-        
+
     } catch (error) {
         console.error('Submission Error:', error);
         showErrorModal('An error occurred. Please check your connection and try again.');
@@ -230,12 +230,12 @@ const showSuccessModal = (data) => {
     document.getElementById('modalIcon').className = 'modal-icon success';
     document.getElementById('modalTitle').textContent = 'Thank You!';
     document.getElementById('modalMessage').textContent = 'Your feedback has been recorded successfully. We appreciate your valuable insights.';
-    
+
     // Display response data
     document.getElementById('modalSentiment').textContent = data.sentiment || 'N/A';
     document.getElementById('modalIssueType').textContent = data.issue_type || 'N/A';
     document.getElementById('modalSeverity').textContent = data.severity || 'N/A';
-    
+
     feedbackModal.classList.add('show');
 };
 
@@ -247,7 +247,7 @@ const showErrorModal = (message) => {
     document.getElementById('modalSentiment').textContent = '-';
     document.getElementById('modalIssueType').textContent = '-';
     document.getElementById('modalSeverity').textContent = '-';
-    
+
     feedbackModal.classList.add('show');
 };
 
@@ -322,5 +322,5 @@ if (emergencyBtn) {
 
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize any required setup
-    console.log('Aurevia Medical Institute Website Loaded');
+    console.log('CareAxis Medical Institute Website Loaded');
 });

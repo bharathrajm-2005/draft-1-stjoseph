@@ -1,5 +1,5 @@
 /**
- * AUREVIA HOSPITAL – HOSPITAL.JS
+ * CAREAXIS HOSPITAL – HOSPITAL.JS
  * Powers: Appointment Booking, Verified Feedback, Navbar Scroll, Animations
  */
 
@@ -536,10 +536,10 @@ const API = '/api';
                 form.reset();
                 userCoords = null;
             } else {
-                alert(json.message || "Priority dispatch failed. Please call 1300-AUREVIA immediately.");
+                alert(json.message || "Priority dispatch failed. Please call 1300-CAREAXIS immediately.");
             }
         } catch (e) {
-            alert("Network Error. Please dial 1300-AUREVIA directly for emergency support.");
+            alert("Network Error. Please dial 1300-CAREAXIS directly for emergency support.");
         } finally {
             btnInner.style.display = 'flex';
             loader.style.display = 'none';

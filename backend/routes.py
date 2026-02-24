@@ -32,6 +32,13 @@ from .controllers import (
     # Doctor appointment workflow
     get_doctor_appointments,
     complete_appointment,
+    # Phase 2 AI Intelligence
+    get_stress_index,
+    get_doctor_performance,
+    get_appointment_forecast,
+    get_sla_risk_tickets,
+    get_department_risk,
+    get_driver_performance,
 )
 from utils.helpers import staff_required, admin_required
 
@@ -76,3 +83,11 @@ api_bp.route('/driver/emergency/complete/<int:id>', methods=['POST'])(staff_requ
 # === DOCTOR APPOINTMENT WORKFLOW ===
 api_bp.route('/doctor/appointments', methods=['GET'])(staff_required(get_doctor_appointments))
 api_bp.route('/doctor/appointments/<int:appt_id>/complete', methods=['POST'])(staff_required(complete_appointment))
+
+# === PHASE 2 AI INTELLIGENCE ENDPOINTS (Admin-only) ===
+api_bp.route('/ai/stress-index',         methods=['GET'])(admin_required(get_stress_index))
+api_bp.route('/ai/doctor-performance',   methods=['GET'])(admin_required(get_doctor_performance))
+api_bp.route('/ai/appointment-forecast', methods=['GET'])(admin_required(get_appointment_forecast))
+api_bp.route('/ai/sla-risk',             methods=['GET'])(admin_required(get_sla_risk_tickets))
+api_bp.route('/ai/department-risk',      methods=['GET'])(admin_required(get_department_risk))
+api_bp.route('/ai/driver-performance',   methods=['GET'])(admin_required(get_driver_performance))

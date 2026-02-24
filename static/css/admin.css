@@ -1,25 +1,30 @@
-﻿:root {
-    --primary: #0f172a;
-    --secondary: #334155;
+:root {
+    /* Professional Light Palette */
+    --primary: #1e293b;
+    --secondary: #475569;
     --accent: #2563eb;
-    --accent-glow: rgba(37, 99, 235, 0.15);
+    --accent-secondary: #4f46e5;
+    --accent-glow: rgba(37, 99, 235, 0.1);
     --success: #10b981;
     --warning: #f59e0b;
     --danger: #ef4444;
-    --bg-main: #f8fafc;
+    --bg-main: #f5f7fb;
     --bg-sidebar: #ffffff;
     --text-main: #1e293b;
     --text-muted: #64748b;
     --border: #e2e8f0;
-    --panel-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+    --panel-glass: #ffffff;
+    --panel-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
     --radius: 12px;
+    --font-outfit: 'Outfit', sans-serif;
+    --font-inter: 'Inter', sans-serif;
 }
 
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    font-family: 'Inter', sans-serif;
+    font-family: var(--font-inter);
 }
 
 h1,
@@ -27,7 +32,7 @@ h2,
 h3,
 h4,
 .logo-text h3 {
-    font-family: 'Outfit', sans-serif;
+    font-family: var(--font-outfit);
 }
 
 body.admin-body {
@@ -53,6 +58,7 @@ body.admin-body {
     position: sticky;
     top: 0;
     height: 100vh;
+    backdrop-filter: blur(20px);
 }
 
 .logo-wrapper {
@@ -64,15 +70,17 @@ body.admin-body {
 
 .logo-icon {
     font-size: 24px;
-    background: var(--accent-glow);
-    padding: 8px;
-    border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+    padding: 10px;
+    border-radius: 12px;
+    box-shadow: 0 0 20px rgba(0, 245, 255, 0.3);
 }
 
 .logo-text h3 {
-    font-size: 18px;
-    letter-spacing: 1px;
-    color: var(--primary);
+    font-size: 20px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    text-shadow: 0 0 10px rgba(0, 245, 255, 0.5);
 }
 
 .logo-text span {
@@ -110,6 +118,7 @@ body.admin-body {
     border: 1px solid var(--border);
     font-size: 14px;
     background: #fbfcfd;
+    color: var(--primary);
     cursor: pointer;
     transition: all 0.2s;
 }
@@ -140,6 +149,12 @@ body.admin-body {
 .nav-btn:hover {
     background: #f1f5f9;
     color: var(--accent);
+}
+
+.nav-btn.active {
+    background: #eff6ff;
+    color: var(--accent);
+    font-weight: 700;
 }
 
 .sidebar-footer {
@@ -184,7 +199,7 @@ body.admin-body {
 .header-titles h1 {
     font-size: 28px;
     font-weight: 700;
-    color: var(--primary);
+    color: var(--text-main);
     margin-bottom: 4px;
 }
 
@@ -207,14 +222,15 @@ body.admin-body {
 }
 
 .metric-card {
-    background: white;
-    padding: 16px;
+    background: #ffffff;
+    padding: 20px;
     border-radius: var(--radius);
     border: 1px solid var(--border);
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 16px;
     transition: transform 0.2s;
+    box-shadow: var(--panel-shadow);
 }
 
 .metric-card:hover {
@@ -233,18 +249,26 @@ body.admin-body {
 
 .active-tickets .metric-icon {
     background: #eff6ff;
+    color: #3b82f6;
+    box-shadow: none;
 }
 
 .avg-rating .metric-icon {
     background: #fffbeb;
+    color: var(--warning);
+    box-shadow: none;
 }
 
 .critical-cases .metric-icon {
     background: #fef2f2;
+    color: var(--danger);
+    box-shadow: none;
 }
 
 .wait-alert .metric-icon {
     background: #f0fdf4;
+    color: var(--success);
+    box-shadow: none;
 }
 
 .metric-label {
@@ -255,8 +279,9 @@ body.admin-body {
 }
 
 .metric-value {
-    font-size: 20px;
-    color: var(--primary);
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-main);
 }
 
 /* Ticket Grid */
@@ -268,8 +293,9 @@ body.admin-body {
 }
 
 .section-header h2 {
-    font-size: 20px;
-    color: var(--primary);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-main);
 }
 
 .ticket-grid {
@@ -279,17 +305,24 @@ body.admin-body {
 }
 
 .ticket-card {
-    background: white;
+    background: #ffffff;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 20px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: transform 0.2s, box-shadow 0.2s;
     display: flex;
     flex-direction: column;
     gap: 12px;
     position: relative;
     overflow: hidden;
+    box-shadow: var(--panel-shadow);
+}
+
+.ticket-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    border-color: var(--border);
 }
 
 .ticket-card:hover {
@@ -1363,6 +1396,7 @@ body.admin-body {
         transform: scale(1);
     }
 }
+
 /* ================================================================
    ANALYTICS DASHBOARD GRID
 ================================================================ */
@@ -1375,7 +1409,9 @@ body.admin-body {
 }
 
 @media (max-width: 1100px) {
-    .analytics-dashboard-grid { grid-template-columns: 1fr; }
+    .analytics-dashboard-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 .chart-card {
@@ -1383,12 +1419,12 @@ body.admin-body {
     border: 1px solid #e2e8f0;
     border-radius: 18px;
     padding: 20px 22px 16px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
     transition: box-shadow 0.2s;
 }
 
 .chart-card:hover {
-    box-shadow: 0 6px 28px rgba(0,0,0,0.09);
+    box-shadow: 0 6px 28px rgba(0, 0, 0, 0.09);
 }
 
 .chart-card-full {
@@ -1445,9 +1481,365 @@ body.admin-body {
 }
 
 @media (max-width: 1400px) {
-    .metrics-grid { grid-template-columns: repeat(3, 1fr); }
+    .metrics-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
 }
 
 @media (max-width: 900px) {
-    .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+    .metrics-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PHASE 2 — AI INTELLIGENCE PANEL STYLES
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* AI nav button special highlight */
+.ai-nav-btn {
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%) !important;
+    color: #fff !important;
+    border: none !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.02em;
+}
+
+.ai-nav-btn:hover {
+    opacity: 0.9;
+    transform: translateX(3px);
+}
+
+/* AI panel two-column grid (reuses chart-card) */
+.ai-panel-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    margin-top: 20px;
+}
+
+@media (max-width: 1100px) {
+    .ai-panel-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ── Stress Banner ─────────────────────────────────────────────── */
+.stress-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 28px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    color: #f8fafc;
+    margin-bottom: 4px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.stress-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.stress-icon {
+    font-size: 2.4rem;
+}
+
+.stress-label {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: 'Outfit', sans-serif;
+}
+
+.stress-subtext {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 2px;
+}
+
+.stress-right {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.stress-score {
+    font-size: 26px;
+    font-weight: 800;
+    color: #f8fafc;
+    font-family: 'Outfit', sans-serif;
+}
+
+/* Stress level badge — 4 variants */
+.stress-badge {
+    padding: 8px 18px;
+    border-radius: 50px;
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    animation: stressPulse 2.5s ease-in-out infinite;
+}
+
+.stress-badge.LOW {
+    background: #10b981;
+    color: #fff;
+}
+
+.stress-badge.MODERATE {
+    background: #f59e0b;
+    color: #fff;
+}
+
+.stress-badge.HIGH {
+    background: #ef4444;
+    color: #fff;
+}
+
+.stress-badge.CRITICAL {
+    background: linear-gradient(135deg, #dc2626 0%, #7f1d1d 100%);
+    color: #fff;
+    box-shadow: 0 0 16px 4px rgba(239, 68, 68, 0.6);
+}
+
+@keyframes stressPulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.15);
+    }
+
+    50% {
+        transform: scale(1.04);
+        box-shadow: 0 0 0 8px rgba(255, 255, 255, 0);
+    }
+}
+
+/* Factor pills */
+.stress-factors {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+
+.stress-factor-pill {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 11px;
+    color: #cbd5e1;
+    white-space: nowrap;
+}
+
+/* ── Department Risk Cards ─────────────────────────────────────── */
+.dept-risk-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.risk-card {
+    border-radius: 10px;
+    padding: 12px 16px;
+    border-left: 5px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+.risk-card.risk-green {
+    border-left-color: #10b981;
+    background: #f0fdf4;
+}
+
+.risk-card.risk-amber {
+    border-left-color: #f59e0b;
+    background: #fffbeb;
+}
+
+.risk-card.risk-red {
+    border-left-color: #ef4444;
+    background: #fef2f2;
+}
+
+.risk-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.risk-dept {
+    font-weight: 700;
+    font-size: 14px;
+    color: #1e293b;
+}
+
+.risk-badge-indicator {
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+
+.risk-badge-indicator.green {
+    background: #10b981;
+    color: #fff;
+}
+
+.risk-badge-indicator.amber {
+    background: #f59e0b;
+    color: #fff;
+}
+
+.risk-badge-indicator.red {
+    background: #ef4444;
+    color: #fff;
+}
+
+.risk-card-stats {
+    font-size: 12px;
+    color: #64748b;
+    display: flex;
+    gap: 14px;
+    margin-bottom: 8px;
+}
+
+.risk-score-bar {
+    height: 5px;
+    background: #e2e8f0;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.risk-score-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+}
+
+.risk-score-fill.green {
+    background: #10b981;
+}
+
+.risk-score-fill.amber {
+    background: #f59e0b;
+}
+
+.risk-score-fill.red {
+    background: #ef4444;
+}
+
+/* ── SLA Risk List ─────────────────────────────────────────────── */
+.sla-risk-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.sla-risk-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 10px 14px;
+    border: 1px solid #e2e8f0;
+}
+
+.sla-risk-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sla-risk-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sla-ticket-id {
+    font-weight: 800;
+    font-size: 13px;
+    color: #4f46e5;
+}
+
+.sla-dept {
+    font-size: 12px;
+    color: #475569;
+}
+
+.sla-severity {
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.sev-critical {
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+.sev-high {
+    background: #fffbeb;
+    color: #d97706;
+}
+
+.sev-medium {
+    background: #eff6ff;
+    color: #2563eb;
+}
+
+.sev-low {
+    background: #f0fdf4;
+    color: #16a34a;
+}
+
+.sla-bar-wrap {
+    width: 100px;
+    height: 7px;
+    background: #e2e8f0;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.sla-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.4s ease;
+}
+
+.sla-pct {
+    font-size: 12px;
+    font-weight: 700;
+    color: #475569;
+    min-width: 34px;
+    text-align: right;
+}
+
+.sla-time {
+    font-size: 11px;
+    color: #94a3b8;
+    min-width: 60px;
+    text-align: right;
+}
+
+/* No-data placeholder */
+.no-data {
+    text-align: center;
+    color: #94a3b8;
+    font-size: 14px;
+    padding: 30px 0;
 }

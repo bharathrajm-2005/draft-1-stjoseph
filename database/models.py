@@ -19,6 +19,10 @@ class User(db.Model, UserMixin):
     active_appointments = db.Column(db.Integer, default=0)  # Doctor appointment workload
     avg_resolution_time = db.Column(db.Float, default=30.0)
     performance_rating = db.Column(db.Float, default=5.0)
+    # Phase 2 AI fields
+    doctor_performance_score = db.Column(db.Float, default=0.0)
+    driver_efficiency_score  = db.Column(db.Float, default=0.0)
+    complaint_count          = db.Column(db.Integer, default=0)
 
     assigned_tickets = db.relationship('Ticket', backref='assigned_to_user', lazy=True)
 
@@ -98,6 +102,10 @@ class EmergencyRequest(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     accepted_at = db.Column(db.DateTime)
     completed_at = db.Column(db.DateTime)
+    # Phase 2 AI fields
+    eta_minutes          = db.Column(db.Float, nullable=True)
+    driver_response_time = db.Column(db.Float, nullable=True)  # seconds: dispatch→accept
+    completed_duration   = db.Column(db.Float, nullable=True)  # minutes: accept→complete
 
     assigned_driver = db.relationship('User', foreign_keys=[assigned_driver_id])
 
@@ -116,6 +124,8 @@ class Feedback(db.Model):
     is_verified = db.Column(db.Boolean, default=False)
     appointment_id = db.Column(db.Integer, db.ForeignKey('appointments.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Phase 2 AI fields
+    feedback_category = db.Column(db.String(50), nullable=True)  # Clinical/Billing/Infrastructure/Staff/Emergency
     tickets = db.relationship('Ticket', backref='feedback', lazy=True)
     appointment = db.relationship('Appointment', backref='feedbacks', lazy=True)
 
@@ -135,6 +145,8 @@ class Ticket(db.Model):
     resolution_notes = db.Column(db.Text)
     ai_suggested_response = db.Column(db.Text)
     status_history_log = db.Column(db.Text)
+    # Phase 2 AI fields
+    sla_risk_score = db.Column(db.Float, default=0.0)  # 0–1 breach probability
 
 class EscalationLog(db.Model):
     __tablename__ = 'escalation_logs'
@@ -151,3 +163,31 @@ class AIResponseLog(db.Model):
     draft_content = db.Column(db.Text)
     action_taken = db.Column(db.String(50)) 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# ── Phase 2 AI Tables ─────────────────────────────────────
+
+class StressIndexSnapshot(db.Model):
+    """Time-series snapshots of the Hospital Stress Index (capped at 48 rows)."""
+    __tablename__ = 'stress_index_snapshots'
+    id                  = db.Column(db.Integer, primary_key=True)
+    timestamp           = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    stress_score        = db.Column(db.Float, nullable=False)
+    stress_level        = db.Column(db.String(20), nullable=False)  # LOW/MODERATE/HIGH/CRITICAL
+    active_emergencies  = db.Column(db.Integer, default=0)
+    active_appointments = db.Column(db.Integer, default=0)
+    open_tickets        = db.Column(db.Integer, default=0)
+    sla_breaches        = db.Column(db.Integer, default=0)
+    avg_doctor_load     = db.Column(db.Float, default=0.0)
+
+
+class AppointmentForecast(db.Model):
+    """Daily per-department appointment load forecast."""
+    __tablename__ = 'appointment_forecasts'
+    id              = db.Column(db.Integer, primary_key=True)
+    forecast_date   = db.Column(db.String(20), nullable=False, index=True)
+    department      = db.Column(db.String(100), nullable=False)
+    predicted_count = db.Column(db.Integer, default=0)
+    peak_hour       = db.Column(db.Integer, nullable=True)  # 0–23
+    risk_level      = db.Column(db.String(20), default='LOW')  # LOW/MODERATE/HIGH
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)

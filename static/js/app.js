@@ -1,5 +1,5 @@
 /* ============================================
-   AUREVIA MEDICAL INSTITUTE - JAVASCRIPT
+   CAREAXIS MEDICAL INSTITUTE - JAVASCRIPT
    ============================================ */
 
 // Constants
@@ -322,5 +322,5 @@ if (emergencyBtn) {
 
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize any required setup
-    console.log('Aurevia Medical Institute Website Loaded');
+    console.log('CareAxis Medical Institute Website Loaded');
 });

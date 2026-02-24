@@ -35,6 +35,7 @@ class RecoveryService:
             
             # 3. Issue Classification
             issue_type = self.classifier.predict(cleaned_text)
+            feedback_category = self.classifier.categorize(feedback_text)
             
             # 4. Severity Prediction (Enhanced)
             severity = self.severity_engine.calculate_severity(feedback_text, score)
@@ -51,6 +52,7 @@ class RecoveryService:
                 sentiment_score=score,
                 rating=rating,
                 issue_type=issue_type,
+                feedback_category=feedback_category,
                 severity=severity
             )
             db.session.add(new_feedback)

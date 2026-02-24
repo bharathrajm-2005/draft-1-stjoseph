@@ -176,17 +176,17 @@ def seed_database():
     print("Seeding Admin...")
     cursor.execute("""
         INSERT INTO users (name, email, password, role, designation)
-        VALUES ('Aurevia Admin', 'admin@aurevia.com', 'admin123', 'admin', 'Chief Operations Officer')
+        VALUES ('CareAxis Admin', 'admin@careaxis.com', 'admin123', 'admin', 'Chief Operations Officer')
     """)
 
     # 4. Seed Drivers & Ambulances
     print("Seeding drivers and ambulances...")
     drivers_data = [
-        ("Karan Sharma", "karan@aurevia.com", "AMB-001", 12.9716, 77.5946),
-        ("Sumeet Vyas",  "sumeet@aurevia.com", "AMB-002", 12.9345, 77.6101),
-        ("Rahul Bose",   "rahul@aurevia.com", "AMB-003", 12.9562, 77.7019),
-        ("Vikas Khanna", "vikas@aurevia.com", "AMB-004", 13.0358, 77.5970),
-        ("Aditya Roy",   "aditya@aurevia.com", "AMB-005", 12.9141, 77.6413)
+        ("Karan Sharma", "karan@careaxis.com", "AMB-001", 12.9716, 77.5946),
+        ("Sumeet Vyas",  "sumeet@careaxis.com", "AMB-002", 12.9345, 77.6101),
+        ("Rahul Bose",   "rahul@careaxis.com", "AMB-003", 12.9562, 77.7019),
+        ("Vikas Khanna", "vikas@careaxis.com", "AMB-004", 13.0358, 77.5970),
+        ("Aditya Roy",   "aditya@careaxis.com", "AMB-005", 12.9141, 77.6413)
     ]
     
     for name, email, v_num, lat, lng in drivers_data:
@@ -232,7 +232,7 @@ def seed_database():
             fname = random.choice(first_names)
             lname = random.choice(last_names)
             name  = f"Dr. {fname} {lname}"
-            email = f"{fname.lower()}.{lname.lower()}{random.randint(1,99)}@aurevia.com"
+            email = f"{fname.lower()}.{lname.lower()}{random.randint(1,99)}@careaxis.com"
             designation = random.choice(designations[dept_name])
             avg_res = random.randint(20, 180)
             rating  = round(random.uniform(3.5, 5.0), 1)

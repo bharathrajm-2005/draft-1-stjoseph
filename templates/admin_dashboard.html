@@ -21,7 +21,7 @@
                 <div class="logo-wrapper">
                     <span class="logo-icon">⚕️</span>
                     <div class="logo-text">
-                        <h3>AUREVIA</h3>
+                        <h3>CAREAXIS</h3>
                         <span>INCIDENT INTELLIGENCE</span>
                     </div>
                 </div>
@@ -67,6 +67,9 @@
                     <button id="showAnalyticsBtn" class="nav-btn">
                         <span>📊</span> Analytics &amp; Insights
                     </button>
+                    <button id="showAIBtn" class="nav-btn ai-nav-btn">
+                        <span>🧠</span> AI Intelligence
+                    </button>
                     <button id="showAppointmentsBtn" class="nav-btn">
                         <span>📅</span> Appointments
                     </button>
@@ -79,7 +82,7 @@
                     <div class="update-info">Last update: <span id="lastUpdate">Just now</span></div>
                     <div class="server-status"><span class="status-dot online"></span> System Live</div>
                     <a href="/logout" class="logout-link"
-                        style="margin-top: 15px; display: block; color: #94a3b8; text-decoration: none; font-size: 13px; font-weight: 600;">👋
+                        style="margin-top: 15px; display: block; color: var(--secondary); text-decoration: none; font-size: 13px; font-weight: 600;">👋
                         Sign Out</a>
                 </div>
             </nav>
@@ -220,6 +223,102 @@
                         </div>
                     </div>
                 </section>
+
+                <!-- ══ AI INTELLIGENCE PANEL (Phase 2) ══════════════════════════ -->
+                <section class="content-section hidden" id="aiSection">
+                    <div class="section-header">
+                        <div>
+                            <h2>🧠 AI Intelligence Centre</h2>
+                            <p style="color:var(--secondary);font-size:13px;margin-top:4px">
+                                Predictive analytics, risk scoring &amp; operational intelligence
+                            </p>
+                        </div>
+                        <button class="btn-close-view" id="closeAI">← Back to Queue</button>
+                    </div>
+
+                    <!-- Stress Index Banner -->
+                    <div class="stress-banner" id="stressBanner">
+                        <div class="stress-left">
+                            <div class="stress-icon">🏥</div>
+                            <div>
+                                <div class="stress-label">Hospital Stress Index</div>
+                                <div class="stress-subtext">Real-time operational load score</div>
+                            </div>
+                        </div>
+                        <div class="stress-right">
+                            <div class="stress-badge LOW" id="stressBadge">LOW</div>
+                            <div class="stress-score" id="stressScore">—</div>
+                            <div class="stress-factors" id="stressFactors"></div>
+                        </div>
+                    </div>
+
+                    <!-- AI Charts Grid -->
+                    <div class="ai-panel-grid">
+
+                        <!-- Doctor Performance -->
+                        <div class="chart-card">
+                            <div class="chart-card-header">
+                                <div>
+                                    <div class="chart-card-title">👨‍⚕️ Doctor Performance Ranking</div>
+                                    <div class="chart-card-subtitle">AI score: speed · satisfaction · SLA · emergency
+                                    </div>
+                                </div>
+                                <span class="chart-card-icon">🏆</span>
+                            </div>
+                            <div id="doctorRankChart" class="chart-area"></div>
+                        </div>
+
+                        <!-- Driver Performance -->
+                        <div class="chart-card">
+                            <div class="chart-card-header">
+                                <div>
+                                    <div class="chart-card-title">🚑 Driver Efficiency Ranking</div>
+                                    <div class="chart-card-subtitle">Response time · completion rate · missions</div>
+                                </div>
+                                <span class="chart-card-icon">⚡</span>
+                            </div>
+                            <div id="driverRankChart" class="chart-area"></div>
+                        </div>
+
+                        <!-- Appointment Forecast full-width -->
+                        <div class="chart-card chart-card-full">
+                            <div class="chart-card-header">
+                                <div>
+                                    <div class="chart-card-title">📈 Appointment Load Forecast</div>
+                                    <div class="chart-card-subtitle">7-day predicted volume per department (AI
+                                        regression)</div>
+                                </div>
+                                <span class="chart-card-icon">🔮</span>
+                            </div>
+                            <div id="forecastChart" class="chart-area" style="height:280px"></div>
+                        </div>
+
+                        <!-- Department Risk Map -->
+                        <div class="chart-card">
+                            <div class="chart-card-header">
+                                <div>
+                                    <div class="chart-card-title">🗺️ Department Risk Map</div>
+                                    <div class="chart-card-subtitle">GREEN · AMBER · RED complaint density</div>
+                                </div>
+                                <span class="chart-card-icon">⚠️</span>
+                            </div>
+                            <div id="deptRiskCards" class="dept-risk-container"></div>
+                        </div>
+
+                        <!-- SLA Risk Alerts -->
+                        <div class="chart-card">
+                            <div class="chart-card-header">
+                                <div>
+                                    <div class="chart-card-title">⏱️ SLA Breach Risk Alerts</div>
+                                    <div class="chart-card-subtitle">Tickets at risk of missing SLA deadline</div>
+                                </div>
+                                <span class="chart-card-icon">🚨</span>
+                            </div>
+                            <div id="slaRiskContainer" class="sla-risk-list"></div>
+                        </div>
+
+                    </div><!-- /ai-panel-grid -->
+                </section><!-- /aiSection -->
 
                 <!-- Appointments Section (Hidden by default) -->
                 <section class="content-section hidden" id="appointmentsSection">

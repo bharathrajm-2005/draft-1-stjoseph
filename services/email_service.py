@@ -1,5 +1,5 @@
 """
-Email Service for Aurevia Hospital
+Email Service for CareAxis Hospital
 Sends appointment confirmations using Flask-Mail.
 Falls back to console logging when SMTP is not configured.
 """
@@ -10,13 +10,13 @@ from utils.logger import app_logger
 def send_appointment_confirmation(mail_instance, appointment, department_name, doctor_name=None):
     """Send an appointment confirmation email to the patient."""
     try:
-        subject = "✅ Appointment Confirmed – Aurevia Medical Institute"
+        subject = "✅ Appointment Confirmed – CareAxis Medical Institute"
         doctor_line = f"Assigned Doctor: {doctor_name}" if doctor_name else "Doctor: To be assigned"
         
         html_body = f"""
         <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc;">
             <div style="background: linear-gradient(135deg, #1a56db, #0e9f6e); padding: 40px 30px; text-align: center; border-radius: 12px 12px 0 0;">
-                <h1 style="color: white; margin: 0; font-size: 26px;">⚕️ Aurevia Medical Institute</h1>
+                <h1 style="color: white; margin: 0; font-size: 26px;">⚕️ CareAxis Medical Institute</h1>
                 <p style="color: rgba(255,255,255,0.85); margin: 8px 0 0;">Appointment Confirmation</p>
             </div>
             <div style="background: white; padding: 40px 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
@@ -41,7 +41,7 @@ def send_appointment_confirmation(mail_instance, appointment, department_name, d
                 <p style="color: #6b7280; font-size: 14px; margin-top: 24px;">For changes or cancellations, contact us at <a href="tel:+911234567890" style="color: #1a56db;">+91 1234 567 890</a> or reply to this email.</p>
                 
                 <div style="text-align: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
-                    <p style="color: #9ca3af; font-size: 12px; margin: 0;">© 2025 Aurevia Medical Institute · 123 Medical Plaza, Healthcare District</p>
+                    <p style="color: #9ca3af; font-size: 12px; margin: 0;">© 2025 CareAxis Medical Institute · 123 Medical Plaza, Healthcare District</p>
                     <p style="color: #9ca3af; font-size: 12px; margin: 4px 0 0;">This is an automated confirmation. Do not reply.</p>
                 </div>
             </div>

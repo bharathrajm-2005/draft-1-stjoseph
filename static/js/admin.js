@@ -1,5 +1,5 @@
 /**
- * AUREVIA HOSPITAL INCIDENT INTELLIGENCE
+ * CAREAXIS HOSPITAL INCIDENT INTELLIGENCE
  * FULLY AUTOMATED SMART ASSIGNMENT SYSTEM
  */
 
@@ -35,6 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
             sentimentFilter: document.getElementById('filterSentiment'),
             statusFilter: document.getElementById('filterStatus'),
             viewAnalytics: document.getElementById('showAnalyticsBtn'),
+            viewAI: document.getElementById('showAIBtn'),
             viewAppointments: document.getElementById('showAppointmentsBtn'),
             viewEmergency: document.getElementById('showEmergencyBtn'),
             refreshBtn: document.getElementById('refreshBtn'),
@@ -43,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
         views: {
             ticketView: document.querySelector('.ticket-view'),
             analyticsView: document.getElementById('analyticsSection'),
+            aiView: document.getElementById('aiSection'),
             appointmentsView: document.getElementById('appointmentsSection'),
             emergencyView: document.getElementById('emergencySection')
         },
@@ -93,6 +95,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         elements.sidebar.viewAnalytics.addEventListener('click', () => switchView('analytics'));
+        if (elements.sidebar.viewAI)
+            elements.sidebar.viewAI.addEventListener('click', () => switchView('ai'));
         if (elements.sidebar.viewAppointments)
             elements.sidebar.viewAppointments.addEventListener('click', () => switchView('appointments'));
 
@@ -102,10 +106,12 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.sidebar.refreshBtn.addEventListener('click', loadDashboardState);
 
         const closeAnalytics = document.getElementById('closeAnalytics');
+        const closeAI = document.getElementById('closeAI');
         const closeAppointments = document.getElementById('closeAppointments');
         const closeEmergency = document.getElementById('closeEmergency');
 
         if (closeAnalytics) closeAnalytics.addEventListener('click', () => switchView('tickets'));
+        if (closeAI) closeAI.addEventListener('click', () => switchView('tickets'));
         if (closeAppointments) closeAppointments.addEventListener('click', () => switchView('tickets'));
         if (closeEmergency) closeEmergency.addEventListener('click', () => switchView('tickets'));
 
@@ -418,6 +424,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (viewName === 'analytics') {
             elements.views.analyticsView.classList.remove('hidden');
             renderAnalyticsDashboard();
+        } else if (viewName === 'ai') {
+            elements.views.aiView.classList.remove('hidden');
+            renderAIPanel();
         } else if (viewName === 'appointments') {
             elements.views.appointmentsView.classList.remove('hidden');
             loadAppointments();
@@ -434,7 +443,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const CHART_LAYOUT = {
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
-        font: { family: 'Outfit, Inter, sans-serif', size: 12, color: '#475569' },
+        font: { family: 'Outfit, Inter, sans-serif', size: 12, color: '#1e293b' },
         margin: { t: 10, b: 40, l: 40, r: 10 },
         showlegend: true,
         legend: { bgcolor: 'transparent', font: { size: 11 } }
@@ -507,7 +516,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }], {
                 ...CHART_LAYOUT, height: 260,
                 xaxis: { showgrid: false, tickangle: -30 },
-                yaxis: { gridcolor: '#f1f5f9', rangemode: 'tozero' }
+                yaxis: { gridcolor: '#e2e8f0', rangemode: 'tozero' }
             }, CHART_CONFIG);
         } catch (e) { console.warn('Trend chart error', e); }
 
@@ -812,6 +821,214 @@ document.addEventListener('DOMContentLoaded', () => {
             toast.classList.remove('show');
             setTimeout(() => toast.remove(), 300);
         }, 3000);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PHASE 2 — AI INTELLIGENCE PANEL
+    // ═══════════════════════════════════════════════════════════════════
+    let aiRefreshTimer = null;
+
+    async function renderAIPanel() {
+        // Fire all 6 AI requests in parallel
+        const [siRes, docRes, drvRes, fstRes, deptRes, slaRes] = await Promise.allSettled([
+            fetch(`${API_BASE_URL}/ai/stress-index`),
+            fetch(`${API_BASE_URL}/ai/doctor-performance`),
+            fetch(`${API_BASE_URL}/ai/driver-performance`),
+            fetch(`${API_BASE_URL}/ai/appointment-forecast`),
+            fetch(`${API_BASE_URL}/ai/department-risk`),
+            fetch(`${API_BASE_URL}/ai/sla-risk`),
+        ]);
+
+        const tryJson = async (res) => {
+            try {
+                if (res.status === 'fulfilled' && res.value.ok) {
+                    const j = await res.value.json();
+                    return j.data || [];
+                }
+            } catch { }
+            return [];
+        };
+
+        const [siData, docData, drvData, fstData, deptData, slaData] = await Promise.all([
+            tryJson(siRes), tryJson(docRes), tryJson(drvRes),
+            tryJson(fstRes), tryJson(deptRes), tryJson(slaRes)
+        ]);
+
+        renderStressIndex(siData);
+        renderDoctorRanking(docData);
+        renderDriverRanking(drvData);
+        renderForecastChart(fstData);
+        renderDeptRisk(deptData);
+        renderSLARisk(slaData);
+
+        // Auto-refresh stress index every 60s while AI panel is visible
+        if (aiRefreshTimer) clearInterval(aiRefreshTimer);
+        aiRefreshTimer = setInterval(async () => {
+            if (!elements.views.aiView.classList.contains('hidden')) {
+                const r = await fetch(`${API_BASE_URL}/ai/stress-index`).catch(() => null);
+                if (r && r.ok) {
+                    const j = await r.json();
+                    renderStressIndex(j.data || {});
+                }
+            } else {
+                clearInterval(aiRefreshTimer);
+            }
+        }, 60000);
+    }
+
+    function renderStressIndex(d) {
+        if (!d || typeof d.score === 'undefined') return;
+        const badge = document.getElementById('stressBadge');
+        const score = document.getElementById('stressScore');
+        const factors = document.getElementById('stressFactors');
+        if (!badge) return;
+
+        badge.textContent = d.level || 'LOW';
+        badge.className = `stress-badge ${d.level || 'LOW'}`;
+        if (score) score.textContent = `${d.score || 0} / 100`;
+
+        if (factors && d.factors) {
+            factors.innerHTML = Object.entries(d.factors).map(([k, v]) =>
+                `<span class="stress-factor-pill">${k.replace(/_/g, ' ')}: <strong>${v}</strong></span>`
+            ).join('');
+        }
+    }
+
+    function renderDoctorRanking(data) {
+        if (!data || !data.length) {
+            document.getElementById('doctorRankChart').innerHTML = '<p class="no-data">No doctor data available.</p>';
+            return;
+        }
+        const names = data.map(d => d.name);
+        const scores = data.map(d => d.score);
+        Plotly.newPlot('doctorRankChart', [{
+            type: 'bar', orientation: 'h',
+            y: names.slice().reverse(),
+            x: scores.slice().reverse(),
+            marker: {
+                color: scores.slice().reverse().map(s =>
+                    s >= 80 ? '#10b981' : s >= 60 ? '#f59e0b' : '#ef4444'
+                )
+            },
+            text: scores.slice().reverse().map(s => `${s}`),
+            textposition: 'outside',
+        }], {
+            ...CHART_LAYOUT,
+            xaxis: { range: [0, 105], title: 'AI Score (0–100)' },
+            margin: { t: 10, b: 40, l: 130, r: 40 }
+        }, CHART_CONFIG);
+    }
+
+    function renderDriverRanking(data) {
+        if (!data || !data.length) {
+            document.getElementById('driverRankChart').innerHTML = '<p class="no-data">No driver data available.</p>';
+            return;
+        }
+        const names = data.map(d => d.name);
+        const scores = data.map(d => d.score);
+        Plotly.newPlot('driverRankChart', [{
+            type: 'bar', orientation: 'h',
+            y: names.slice().reverse(),
+            x: scores.slice().reverse(),
+            marker: {
+                color: scores.slice().reverse().map(s =>
+                    s >= 80 ? '#6366f1' : s >= 60 ? '#8b5cf6' : '#ec4899'
+                )
+            },
+            text: scores.slice().reverse().map(s => `${s}`),
+            textposition: 'outside',
+        }], {
+            ...CHART_LAYOUT,
+            xaxis: { range: [0, 105], title: 'Efficiency Score (0–100)' },
+            margin: { t: 10, b: 40, l: 130, r: 40 }
+        }, CHART_CONFIG);
+    }
+
+    function renderForecastChart(data) {
+        if (!data || !data.length) {
+            document.getElementById('forecastChart').innerHTML = '<p class="no-data">No forecast data available.</p>';
+            return;
+        }
+        // Group by department
+        const byDept = {};
+        data.forEach(f => {
+            if (!byDept[f.department]) byDept[f.department] = { dates: [], counts: [] };
+            byDept[f.department].dates.push(f.date);
+            byDept[f.department].counts.push(f.predicted);
+        });
+        const colors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
+        const traces = Object.entries(byDept).map(([dept, vals], i) => ({
+            type: 'scatter', mode: 'lines+markers',
+            name: dept,
+            x: vals.dates,
+            y: vals.counts,
+            line: { color: colors[i % colors.length], width: 2 },
+            marker: { size: 7 }
+        }));
+        Plotly.newPlot('forecastChart', traces, {
+            ...CHART_LAYOUT,
+            xaxis: { title: 'Date' },
+            yaxis: { title: 'Predicted Appointments' },
+            margin: { t: 10, b: 50, l: 50, r: 10 }
+        }, CHART_CONFIG);
+    }
+
+    function renderDeptRisk(data) {
+        const container = document.getElementById('deptRiskCards');
+        if (!container) return;
+        if (!data || !data.length) {
+            container.innerHTML = '<p class="no-data">No department risk data.</p>';
+            return;
+        }
+        container.innerHTML = data.map(d => `
+            <div class="risk-card risk-${d.risk_level.toLowerCase()}">
+                <div class="risk-card-top">
+                    <span class="risk-dept">${d.department}</span>
+                    <span class="risk-badge-indicator ${d.risk_level.toLowerCase()}">${d.risk_level}</span>
+                </div>
+                <div class="risk-card-stats">
+                    <span>🎫 ${d.open_tickets} open</span>
+                    <span>⚠️ ${d.sla_breaches} SLA</span>
+                    <span>🔴 ${d.critical_tickets} critical</span>
+                </div>
+                <div class="risk-score-bar">
+                    <div class="risk-score-fill ${d.risk_level.toLowerCase()}" style="width:${Math.min(100, d.risk_score)}%"></div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function renderSLARisk(data) {
+        const container = document.getElementById('slaRiskContainer');
+        if (!container) return;
+        if (!data || !data.length) {
+            container.innerHTML = '<p class="no-data">No at-risk tickets found. ✅</p>';
+            return;
+        }
+        const highRisk = data.filter(t => t.sla_risk_score >= 0.5);
+        if (!highRisk.length) {
+            container.innerHTML = '<p class="no-data">All tickets within safe SLA range. ✅</p>';
+            return;
+        }
+        container.innerHTML = highRisk.map(t => {
+            const pct = Math.round(t.sla_risk_score * 100);
+            const col = pct >= 85 ? '#ef4444' : pct >= 65 ? '#f59e0b' : '#6366f1';
+            return `
+            <div class="sla-risk-row">
+                <div class="sla-risk-left">
+                    <span class="sla-ticket-id">#${t.ticket_id}</span>
+                    <span class="sla-dept">${t.department}</span>
+                    <span class="sla-severity sev-${(t.severity || '').toLowerCase()}">${t.severity}</span>
+                </div>
+                <div class="sla-risk-right">
+                    <div class="sla-bar-wrap">
+                        <div class="sla-bar-fill" style="width:${pct}%;background:${col}"></div>
+                    </div>
+                    <span class="sla-pct">${pct}%</span>
+                    <span class="sla-time">${t.remaining_mins > 0 ? t.remaining_mins + 'm left' : 'OVERDUE'}</span>
+                </div>
+            </div>`;
+        }).join('');
     }
 
     init();

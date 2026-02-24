@@ -55,7 +55,7 @@ def test_sos_dispatch():
         return
 
     # 2. Login as Admin to check monitor
-    if login("admin@aurevia.com", "admin123"):
+    if login("admin@careaxis.com", "admin123"):
         print("\n--- 🖥️ Verifying Admin Monitor ---")
         try:
             with opener.open(f"{BASE_URL}/api/admin/emergencies") as response:
@@ -79,7 +79,7 @@ def test_sos_dispatch():
             print(f"❌ Admin Verification Failed: {e}")
 
     # 3. Login as Driver to verify alert
-    driver_email = "sumeet@aurevia.com" # Dispatched above (nearest to 12.9345, 77.6101 is AMB-002)
+    driver_email = "sumeet@careaxis.com" # Dispatched above (nearest to 12.9345, 77.6101 is AMB-002)
     if login(driver_email, "driver123"):
         print(f"\n--- 📢 Verifying Driver Alert for {driver_email} ---")
         try:
@@ -104,7 +104,7 @@ def test_sos_dispatch():
                         print(f"✅ Mission Completed: {comp_data['message']}")
                         
                     # 6. Verify status reset in Admin monitor
-                    login("admin@aurevia.com", "admin123")
+                    login("admin@careaxis.com", "admin123")
                     with opener.open(f"{BASE_URL}/api/admin/ambulances") as response:
                         res_data = json.loads(response.read().decode())
                         ambulances = res_data['data']

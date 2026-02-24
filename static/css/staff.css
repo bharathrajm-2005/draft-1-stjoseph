@@ -60,7 +60,7 @@
     background: white;
     border-radius: 16px;
     padding: 24px;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.04);
     border: 1px solid #e2e8f0;
     transition: transform 0.2s, box-shadow 0.2s;
     cursor: pointer;
@@ -74,7 +74,7 @@
 }
 
 .staff-task-card.breached {
-    border-left: 5px solid #000000;
+    border-left: 5px solid var(--breached-color);
 }
 
 .staff-task-card.priority-high {
@@ -111,7 +111,7 @@
     justify-content: space-between;
     align-items: center;
     padding-top: 16px;
-    border-top: 1px solid #f1f5f9;
+    border-top: 1px solid var(--border);
 }
 
 .task-sla-timer {
@@ -261,9 +261,9 @@
 .empty-state {
     text-align: center;
     padding: 80px 40px;
-    background: #ffffff;
+    background: var(--panel-glass);
     border-radius: 24px;
-    border: 2px dashed #e2e8f0;
+    border: 2px dashed var(--border);
     grid-column: 1 / -1;
     display: flex;
     flex-direction: column;
@@ -304,14 +304,15 @@
 }
 
 .emergency-modal {
-    background: white;
+    background: var(--bg-sidebar);
+    backdrop-filter: blur(20px);
     width: 90%;
     max-width: 500px;
     border-radius: 20px;
     padding: 30px;
     text-align: center;
     box-shadow: 0 0 50px rgba(239, 68, 68, 0.5);
-    border: 4px solid #ef4444;
+    border: 2px solid var(--danger);
     animation: alert-shake 0.5s infinite;
 }
 
@@ -372,9 +373,10 @@
 
 .emergency-body {
     margin: 25px 0;
-    background: #f8fafc;
+    background: rgba(255, 255, 255, 0.03);
     padding: 20px;
     border-radius: 12px;
+    border: 1px solid var(--border);
 }
 
 .detail-label {
@@ -412,15 +414,16 @@
     bottom: 30px;
     left: 50%;
     transform: translateX(-50%) translateY(120px);
-    background: #ffffff;
+    background: var(--bg-sidebar);
+    backdrop-filter: blur(20px);
     width: 90%;
     max-width: 480px;
     padding: 24px;
     border-radius: 28px;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
     z-index: 15000;
     border: 1px solid #e2e8f0;
-    border-top: 6px solid #ef4444;
+    border-top: 6px solid var(--danger);
     transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
     display: none;
     /* Controlled by .active class */
@@ -471,7 +474,7 @@
     content: '';
     width: 10px;
     height: 10px;
-    background: #ef4444;
+    background: var(--danger);
     border-radius: 50%;
     display: inline-block;
     animation: sos-pulse-ring 1.2s infinite;
@@ -565,6 +568,7 @@
 .emergency-overlay.active {
     display: flex !important;
 }
+
 /* ================================================================
    APPOINTMENT CARDS - DOCTOR DASHBOARD
 ================================================================ */
@@ -576,18 +580,19 @@
 }
 
 .appt-card {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
+    background: var(--panel-glass);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
     border-radius: 16px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    transition: box-shadow 0.2s, transform 0.2s;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--panel-shadow);
 }
 
 .appt-card:hover {
-    box-shadow: 0 6px 24px rgba(0,0,0,0.1);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
     transform: translateY(-2px);
 }
 
@@ -596,8 +601,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 14px 18px;
-    border-bottom: 1px solid #f1f5f9;
-    background: #f8fafc;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.03);
 }
 
 .appt-id-row {
@@ -632,7 +637,8 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
+    background: transparent;
 }
 
 .appt-row {
@@ -654,8 +660,8 @@
 
 .appt-val {
     font-size: 14px;
-    font-weight: 600;
-    color: #1e293b;
+    font-weight: 700;
+    color: var(--text-main);
     text-align: right;
     word-break: break-word;
 }
@@ -679,8 +685,8 @@
 
 .appt-card-footer {
     padding: 14px 18px;
-    border-top: 1px solid #f1f5f9;
-    background: #fafbfc;
+    border-top: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.02);
 }
 
 .btn-complete-appt {

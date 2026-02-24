@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Staff Portal | Aurevia Hospital Intelligence</title>
+    <title>Staff Portal | CareAxis Hospital Intelligence</title>
     <!-- Use admin CSS base rules -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/staff.css') }}">
@@ -18,7 +18,7 @@
             <div class="sidebar-header">
                 <div class="logo-group">
                     <span class="logo-icon">🏥</span>
-                    <span class="logo-text">Aurevia <small>Staff</small></span>
+                    <span class="logo-text">CareAxis <small>Staff</small></span>
                 </div>
             </div>
 
@@ -60,6 +60,10 @@
                     <div class="profile-metric-pill">
                         <span class="pill-label">Rating</span>
                         <span class="pill-value" id="profileRating">--/5.0</span>
+                    </div>
+                    <div class="profile-metric-pill ai-score-pill" title="AI Performance Score (0-100)">
+                        <span class="pill-label">🧠 AI Score</span>
+                        <span class="pill-value" id="profileAIScore">—</span>
                     </div>
                 </div>
             </header>
@@ -166,6 +170,8 @@
                 <div class="emergency-meta">
                     <span class="badge" id="alertSeverity">URGENT</span>
                     <span id="alertTime" class="alert-time-badge">--:--</span>
+                    <span id="alertETA" class="eta-badge hidden">📍 ETA: <strong id="alertETAValue">--</strong>
+                        min</span>
                 </div>
             </div>
             <div class="emergency-actions">

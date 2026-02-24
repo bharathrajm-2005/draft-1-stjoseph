@@ -8,7 +8,19 @@ from services.ai_response_service import AIResponseService
 from services.triage_service import TriageService
 from services.ambulance_service import AmbulanceService
 from services.email_service import send_appointment_confirmation
-from database.models import Feedback, Ticket, Department, User, Appointment, db, EscalationLog, AIResponseLog, Ambulance, EmergencyDispatch, EmergencyRequest
+# Phase 2 AI services
+from services.stress_index_service import stress_index_service
+from services.doctor_performance_service import doctor_performance_service
+from services.forecast_service import forecast_service
+from services.sla_risk_service import sla_risk_service
+from services.driver_scoring_service import driver_scoring_service
+from services.department_risk_service import department_risk_service
+from services.repeat_complaint_service import repeat_complaint_service
+from services.eta_service import eta_service
+from database.models import (Feedback, Ticket, Department, User, Appointment, db,
+                              EscalationLog, AIResponseLog, Ambulance,
+                              EmergencyDispatch, EmergencyRequest,
+                              StressIndexSnapshot, AppointmentForecast)
 from utils.helpers import format_response
 from utils.logger import app_logger
 import json
@@ -99,6 +111,18 @@ def submit_feedback():
                     ticket.status_history_log = json.dumps(history)
 
         db.session.commit()
+
+        # ── Phase 2: Repeat Complaint Detection (non-blocking) ────────────
+        try:
+            rep = repeat_complaint_service.evaluate(data['patient_id'])
+            if rep.get('flagged'):
+                app_logger.warning(
+                    f"High-Risk Patient {data['patient_id']}: "
+                    f"{rep['complaint_count']} complaints, "
+                    f"ticket #{rep.get('ticket_id_escalated')} escalated"
+                )
+        except Exception as rep_err:
+            app_logger.error(f"RepeatComplaint check failed (non-blocking): {rep_err}")
 
         return jsonify(format_response("success", data={
             "id":              feedback.id,
@@ -374,9 +398,12 @@ def get_staff_profile():
         "department": user.department,
         "designation": user.designation,
         "active_tasks": total_active,
-        "avg_res_time": round(user.avg_resolution_time),
+        "avg_res_time": round(user.avg_resolution_time) if user.avg_resolution_time else 0,
         "success_rate": user.performance_rating,
-        "load_pct": round(load_pct)
+        "load_pct": round(load_pct),
+        # Phase 2 AI Intelligence
+        "ai_performance_score": round(user.doctor_performance_score, 1) if user.role == 'staff' and user.doctor_performance_score else (
+                                round(user.driver_efficiency_score, 1) if user.role == 'staff' and user.driver_efficiency_score else 0)
     }))
 
 # ── DOCTOR APPOINTMENT CONTROLLERS ───────────────────────────────────────────
@@ -842,7 +869,8 @@ def get_my_emergency():
             "lng": req.longitude,
             "status": req.status,
             "created_at": req.created_at.isoformat() + "Z",
-            "maps_link": f"https://www.google.com/maps?q={req.latitude},{req.longitude}" if req.latitude else None
+            "maps_link": f"https://www.google.com/maps?q={req.latitude},{req.longitude}" if req.latitude else None,
+            "eta_minutes": round(req.eta_minutes) if req.eta_minutes else None
         }))
     except Exception as e:
         app_logger.error(f"Error in get_my_emergency: {e}")
@@ -1002,3 +1030,67 @@ def update_appointment_status(appt_id):
             "completed_at": appt.completed_at.isoformat() + "Z" if appt.completed_at else None
         }
     ))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PHASE 2 AI INTELLIGENCE — Controller Functions
+# ══════════════════════════════════════════════════════════════════════════════
+
+def get_stress_index():
+    """GET /api/ai/stress-index — real-time Hospital Stress Index."""
+    try:
+        data = stress_index_service.compute()
+        return jsonify(format_response('success', data=data)), 200
+    except Exception as e:
+        app_logger.error(f'get_stress_index error: {e}')
+        return jsonify(format_response('error', message=str(e))), 500
+
+
+def get_doctor_performance():
+    """GET /api/ai/doctor-performance — ranked doctor AI scores."""
+    try:
+        data = doctor_performance_service.score_all()
+        return jsonify(format_response('success', data=data)), 200
+    except Exception as e:
+        app_logger.error(f'get_doctor_performance error: {e}')
+        return jsonify(format_response('error', message=str(e))), 500
+
+
+def get_appointment_forecast():
+    """GET /api/ai/appointment-forecast — 7-day load prediction per department."""
+    try:
+        data = forecast_service.forecast_next_days(7)
+        return jsonify(format_response('success', data=data)), 200
+    except Exception as e:
+        app_logger.error(f'get_appointment_forecast error: {e}')
+        return jsonify(format_response('error', message=str(e))), 500
+
+
+def get_sla_risk_tickets():
+    """GET /api/ai/sla-risk — tickets with breach probability scored."""
+    try:
+        data = sla_risk_service.evaluate_all()
+        return jsonify(format_response('success', data=data)), 200
+    except Exception as e:
+        app_logger.error(f'get_sla_risk_tickets error: {e}')
+        return jsonify(format_response('error', message=str(e))), 500
+
+
+def get_department_risk():
+    """GET /api/ai/department-risk — GREEN/AMBER/RED risk per department."""
+    try:
+        data = department_risk_service.evaluate()
+        return jsonify(format_response('success', data=data)), 200
+    except Exception as e:
+        app_logger.error(f'get_department_risk error: {e}')
+        return jsonify(format_response('error', message=str(e))), 500
+
+
+def get_driver_performance():
+    """GET /api/ai/driver-performance — ranked driver efficiency scores."""
+    try:
+        data = driver_scoring_service.score_all()
+        return jsonify(format_response('success', data=data)), 200
+    except Exception as e:
+        app_logger.error(f'get_driver_performance error: {e}')
+        return jsonify(format_response('error', message=str(e))), 500

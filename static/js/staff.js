@@ -1,5 +1,5 @@
 /**
- * AUREVIA HOSPITAL STAFF PORTAL
+ * CAREAXIS HOSPITAL STAFF PORTAL
  * Vanilla JS with AJAX Polling
  */
 
@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
         greeting: document.getElementById('staffGreeting'),
         loadPill: document.getElementById('profileLoad'),
         ratingPill: document.getElementById('profileRating'),
+        aiScorePill: document.getElementById('profileAIScore'),
         taskGrid: document.getElementById('staffTaskGrid'),
         taskCount: document.getElementById('taskCount'),
         // Task Panel
@@ -133,6 +134,15 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.greeting.textContent = `Welcome back, ${data.name}`;
             elements.loadPill.textContent = `${data.load_pct ?? '--'}%`;
             elements.ratingPill.textContent = `${data.success_rate ?? '--'}/5.0`;
+
+            const aiScore = data.ai_performance_score;
+            if (elements.aiScorePill) {
+                elements.aiScorePill.textContent = (aiScore !== null && aiScore !== undefined) ? aiScore : '—';
+                // Optional: color by score
+                if (aiScore >= 80) elements.aiScorePill.style.color = '#10b981';
+                else if (aiScore >= 50) elements.aiScorePill.style.color = '#f59e0b';
+                else if (aiScore > 0) elements.aiScorePill.style.color = '#ef4444';
+            }
 
             // Color load pill by workload
             const loadVal = data.load_pct || 0;
@@ -321,6 +331,18 @@ document.addEventListener('DOMContentLoaded', () => {
             timeBadge.textContent = `Reported: ${formatTimeStack(alert.created_at)}`;
         }
 
+        // ETA Badge (Phase 2)
+        const etaContainer = document.getElementById('alertETA');
+        const etaValue = document.getElementById('alertETAValue');
+        if (etaContainer && etaValue) {
+            if (alert.eta_minutes) {
+                etaValue.textContent = alert.eta_minutes;
+                etaContainer.classList.remove('hidden');
+            } else {
+                etaContainer.classList.add('hidden');
+            }
+        }
+
         const acceptBtn = document.getElementById('acceptTripBtn');
         const completeBtn = document.getElementById('completeTripBtn');
 
@@ -461,7 +483,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    //  DOCTOR APPOINTMENTS MODULE 
+    //  DOCTOR APPOINTMENTS MODULE
 
     let myAppointments = [];
 
@@ -480,7 +502,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderAppointments() {
-        const grid    = document.getElementById('apptGrid');
+        const grid = document.getElementById('apptGrid');
         const countEl = document.getElementById('apptCount');
         if (!grid) return;
         if (countEl) countEl.textContent = myAppointments.length + ' Total';
@@ -491,12 +513,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const statusColor = {
-            'Scheduled':   { bg: '#eff6ff', text: '#1d4ed8', dot: '#3b82f6' },
+            'Scheduled': { bg: '#eff6ff', text: '#1d4ed8', dot: '#3b82f6' },
             'In Progress': { bg: '#fef9c3', text: '#854d0e', dot: '#f59e0b' },
-            'Completed':   { bg: '#f0fdf4', text: '#15803d', dot: '#22c55e' }
+            'Completed': { bg: '#f0fdf4', text: '#15803d', dot: '#22c55e' }
         };
 
-        grid.innerHTML = myAppointments.map(function(a) {
+        grid.innerHTML = myAppointments.map(function (a) {
             const sc = statusColor[a.status] || { bg: '#f1f5f9', text: '#475569', dot: '#94a3b8' };
             const isCompleted = a.status === 'Completed';
             const typeIcon = a.type === 'Emergency' ? '' : (a.type === 'Urgent' ? '' : '');
@@ -506,33 +528,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
             return '<div class="appt-card" data-id="' + a.id + '">' +
                 '<div class="appt-card-header">' +
-                  '<div class="appt-id-row">' +
-                    '<span class="appt-type-icon">' + typeIcon + '</span>' +
-                    '<span class="appt-id-label">#APPT-' + String(a.id).padStart(4,'0') + '</span>' +
-                  '</div>' +
-                  '<span class="appt-status-badge" style="background:' + sc.bg + ';color:' + sc.text + '">' + dotSpan + a.status + '</span>' +
+                '<div class="appt-id-row">' +
+                '<span class="appt-type-icon">' + typeIcon + '</span>' +
+                '<span class="appt-id-label">#APPT-' + String(a.id).padStart(4, '0') + '</span>' +
+                '</div>' +
+                '<span class="appt-status-badge" style="background:' + sc.bg + ';color:' + sc.text + '">' + dotSpan + a.status + '</span>' +
                 '</div>' +
                 '<div class="appt-card-body">' +
-                  '<div class="appt-row"><span class="appt-lbl">Patient</span><span class="appt-val">' + a.patient_name + '</span></div>' +
-                  '<div class="appt-row"><span class="appt-lbl">Email</span><span class="appt-val appt-email">' + a.patient_email + '</span></div>' +
-                  '<div class="appt-row"><span class="appt-lbl">Date &amp; Time</span><span class="appt-val">' + a.appointment_date + '  ' + a.time_slot + '</span></div>' +
-                  '<div class="appt-row"><span class="appt-lbl">Department</span><span class="appt-val">' + a.department + '</span></div>' +
-                  verifiedNote +
+                '<div class="appt-row"><span class="appt-lbl">Patient</span><span class="appt-val">' + a.patient_name + '</span></div>' +
+                '<div class="appt-row"><span class="appt-lbl">Email</span><span class="appt-val appt-email">' + a.patient_email + '</span></div>' +
+                '<div class="appt-row"><span class="appt-lbl">Date &amp; Time</span><span class="appt-val">' + a.appointment_date + '  ' + a.time_slot + '</span></div>' +
+                '<div class="appt-row"><span class="appt-lbl">Department</span><span class="appt-val">' + a.department + '</span></div>' +
+                verifiedNote +
                 '</div>' +
                 footerBtn +
-            '</div>';
+                '</div>';
         }).join('');
     }
 
     // Exposed globally so inline onclick inside innerHTML works
-    window.completeAppointment = async function(apptId, btn) {
+    window.completeAppointment = async function (apptId, btn) {
         if (!apptId) return;
         var originalText = btn.textContent;
         btn.disabled = true;
         btn.textContent = 'Completing\u2026';
 
         try {
-            var res  = await fetch('/api/doctor/appointments/' + apptId + '/complete', { method: 'POST' });
+            var res = await fetch('/api/doctor/appointments/' + apptId + '/complete', { method: 'POST' });
             var json = await res.json();
             if (json.status === 'success') {
                 showToast('\u2705 Appointment completed! Patient can now submit verified feedback.', 'success');
